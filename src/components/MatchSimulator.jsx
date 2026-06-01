@@ -152,9 +152,9 @@ const MatchSimulator = () => {
                                         </div>
                                         <i className="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-rose-400 transition"></i>
                                     </button>
-                                    <button onClick={() => handleStreamSelect('FMGE')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-rose-500 group flex items-center justify-between transition cursor-pointer">
+                                    <button onClick={() => handleStreamSelect('NEET')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-rose-500 group flex items-center justify-between transition cursor-pointer">
                                         <div>
-                                            <p className="font-bold text-white group-hover:text-rose-400 transition">NEET UG</p>
+                                            <p className="font-bold text-white group-hover:text-rose-400 transition">FMGE Aspirants</p>
                                             <p className="text-[11px] text-slate-400">Foreign Medical Aspirants Forum</p>
                                         </div>
                                         <i className="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-rose-400 transition"></i>
