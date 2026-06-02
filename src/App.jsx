@@ -10,6 +10,7 @@ import Login from './components/Login';
 import Chat from './components/Chat';
 import Onboarding from './components/Onboarding';
 import Inbox from './components/Inbox';
+import Matches from './components/Matches';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -56,8 +57,16 @@ function App() {
       <MatchSimulator onConnect={(peer) => setActivePeer(peer)} />
       
       <div className="mt-12 px-4 sm:px-6 lg:px-8">
+        
+        {/* The Pending Requests & Likes */}
         <Inbox onAccept={(peer) => setActivePeer(peer)} />
+
+        {/* The Permanent Instagram-style Match List */}
+        <Matches onSelectMatch={(peer) => setActivePeer(peer)} />
+
+        {/* The Private Chat Room */}
         <Chat peer={activePeer} onClearPeer={() => setActivePeer(null)} />
+        
       </div>
     </div>
   );
