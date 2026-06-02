@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db, auth, storage } from '../firebase';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import EmojiPicker from 'emoji-picker-react';
 
@@ -8,6 +8,7 @@ const Chat = ({ peer, onClearPeer }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [peerStatus, setPeerStatus] = useState('offline'); // New state for live presence
   
   const fileInputRef = useRef(null);
   const scrollRef = useRef();
@@ -23,6 +24,21 @@ const Chat = ({ peer, onClearPeer }) => {
     if (showEmojiPicker) document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showEmojiPicker]);
+
+  // REAL-TIME PRESENCE LISTENER (New Feature)
+  useEffect(() => {
+    if (!peer || !peer.id) return;
+    
+    // Listen directly to the peer's user document
+    const unsubPresence = onSnapshot(doc(db, 'users', peer.id), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setPeerStatus(data.isOnline ? 'online' : 'offline');
+      }
+    });
+
+    return () => unsubPresence();
+  }, [peer]);
 
   const getRoomId = () => {
     if (!peer || !auth.currentUser) return null;
@@ -125,8 +141,8 @@ const Chat = ({ peer, onClearPeer }) => {
         {peer && (
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${peer.status === 'online' ? 'bg-green-500' : 'bg-gray-500'}`} />
-              <span className="text-[12px] text-slate-400">{peer.status === 'online' ? 'Online' : 'Offline'}</span>
+              <div className={`w-2 h-2 rounded-full ${peerStatus === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-slate-600'}`} />
+              <span className="text-[12px] text-slate-400 capitalize">{peerStatus}</span>
             </div>
             <button onClick={onClearPeer} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition">Close</button>
           </div>
