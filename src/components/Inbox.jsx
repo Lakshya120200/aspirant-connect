@@ -1,33 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 
 const Inbox = ({ onAccept }) => {
-  const [requests, setRequests] = useState([]);
+  const [requests, setRequests] = useState([]); // Thunderbolts
+  const [likes, setLikes] = useState([]);       // Regular Swipes
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Listen for any Thunderbolts sent TO this user that are still "pending"
-    const q = query(
+    if (!auth.currentUser) return;
+    const myId = auth.currentUser.uid;
+
+    // 1. Listen for incoming Thunderbolts (Messages)
+    const qThunder = query(
       collection(db, 'thunderbolts'), 
-      where('to', '==', auth.currentUser?.uid),
+      where('to', '==', myId),
       where('status', '==', 'pending_reply')
     );
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
+    const unsubThunder = onSnapshot(qThunder, async (snapshot) => {
       const pendingRequests = [];
-      
-      // 2. Because the thunderbolt only has their ID, we need to look up their actual Name and Details
       for (const requestDoc of snapshot.docs) {
         const requestData = requestDoc.data();
-        
-        // Fetch the sender's profile
         const senderProfileSnap = await getDoc(doc(db, 'users', requestData.from));
         
         if (senderProfileSnap.exists()) {
           const senderData = senderProfileSnap.data();
           pendingRequests.push({
-            id: requestDoc.id, // The ID of the thunderbolt request
+            id: requestDoc.id,
             senderId: requestData.from,
             message: requestData.message,
             senderName: senderData.name,
@@ -35,55 +35,96 @@ const Inbox = ({ onAccept }) => {
           });
         }
       }
-      
       setRequests(pendingRequests);
+    });
+
+    // 2. Listen for incoming Swipes (Likes)
+    const qLikes = query(
+      collection(db, 'swipes'),
+      where('to', '==', myId)
+    );
+
+    const unsubLikes = onSnapshot(qLikes, async (snapshot) => {
+      const pendingLikes = [];
+      for (const likeDoc of snapshot.docs) {
+        const likeData = likeDoc.data();
+        
+        // We check if you already swiped back. If you did, they are a Mutual Match, so we hide them from this specific "pending" list.
+        const mutualCheck = await getDoc(doc(db, 'swipes', `${myId}_${likeData.from}`));
+        
+        if (!mutualCheck.exists()) {
+          const senderProfileSnap = await getDoc(doc(db, 'users', likeData.from));
+          if (senderProfileSnap.exists()) {
+            const senderData = senderProfileSnap.data();
+            pendingLikes.push({
+              id: likeDoc.id,
+              senderId: likeData.from,
+              senderName: senderData.name,
+              senderTarget: senderData.examTarget,
+              senderLocation: senderData.studyBase || 'India'
+            });
+          }
+        }
+      }
+      setLikes(pendingLikes);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubThunder();
+      unsubLikes();
+    };
   }, []);
 
-  const handleAccept = async (request) => {
+  // --- Thunderbolt Actions ---
+  const handleAcceptThunderbolt = async (request) => {
     try {
-      // 1. Change the status in the database to 'active' so the lock is removed
-      await updateDoc(doc(db, 'thunderbolts', request.id), {
-        status: 'active'
-      });
-
-      // 2. Tell App.jsx to instantly open the Chat box with this person!
-      onAccept({
-        id: request.senderId,
-        name: request.senderName,
-        target: request.senderTarget
-      });
-    } catch (error) {
-      console.error("Error accepting request:", error);
-    }
+      await updateDoc(doc(db, 'thunderbolts', request.id), { status: 'active' });
+      onAccept({ id: request.senderId, name: request.senderName, target: request.senderTarget });
+    } catch (error) { console.error("Error accepting request:", error); }
   };
 
-  const handleDecline = async (requestId) => {
+  const handleDeclineThunderbolt = async (requestId) => {
     try {
-      // If they decline, we just update the status to declined to remove it from the inbox
-      await updateDoc(doc(db, 'thunderbolts', requestId), {
-        status: 'declined'
-      });
-    } catch (error) {
-      console.error("Error declining request:", error);
-    }
+      await updateDoc(doc(db, 'thunderbolts', requestId), { status: 'declined' });
+    } catch (error) { console.error("Error declining request:", error); }
   };
 
-  if (loading) return null; // Don't show anything while loading
-  if (requests.length === 0) return null; // Hide the inbox if there are no pending requests
+  // --- Like Actions ---
+  const handleMatchLike = async (like) => {
+    try {
+      // Swipe back to create the mutual match in the database
+      await setDoc(doc(db, 'swipes', `${auth.currentUser.uid}_${like.senderId}`), {
+        from: auth.currentUser.uid,
+        to: like.senderId,
+        timestamp: serverTimestamp()
+      });
+      // Open the chat room
+      onAccept({ id: like.senderId, name: like.senderName, target: like.senderTarget });
+    } catch (error) { console.error("Error matching like:", error); }
+  };
+
+  const handlePassLike = async (likeId) => {
+    try {
+      // If you pass, we just delete their like from the database so it leaves your inbox
+      await deleteDoc(doc(db, 'swipes', likeId));
+    } catch (error) { console.error("Error passing like:", error); }
+  };
+
+  if (loading) return null;
+  if (requests.length === 0 && likes.length === 0) return null; 
 
   return (
-    <div className="max-w-4xl mx-auto w-full mb-8 animate-fade-in">
-      <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 shadow-2xl">
-        <div className="flex items-center gap-3 mb-6">
-          <i className="fa-solid fa-inbox text-indigo-400 text-xl"></i>
-          <h3 className="text-xl font-bold text-white">Pending Connection Requests</h3>
-          <span className="bg-indigo-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">
-            {requests.length} New
-          </span>
+    <div className="max-w-4xl mx-auto w-full mb-8 space-y-8 animate-fade-in">
+      
+      {/* SECTION 1: THUNDERBOLT MESSAGES */}
+      {requests.length > 0 && (
+      <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+        <div className="flex items-center gap-3 mb-6 pl-2">
+          <i className="fa-solid fa-bolt text-indigo-400 text-xl"></i>
+          <h3 className="text-xl font-bold text-white">Priority Messages</h3>
+          <span className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{requests.length}</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -97,25 +138,48 @@ const Inbox = ({ onAccept }) => {
                   <p className="text-sm text-slate-300 italic pl-4">"{req.message}"</p>
                 </div>
               </div>
-              
               <div className="flex gap-3 mt-auto">
-                <button 
-                  onClick={() => handleDecline(req.id)}
-                  className="flex-1 py-2.5 rounded-lg font-semibold text-sm bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition"
-                >
-                  Pass
-                </button>
-                <button 
-                  onClick={() => handleAccept(req)}
-                  className="flex-1 py-2.5 rounded-lg font-semibold text-sm bg-indigo-600 text-white hover:bg-indigo-500 transition shadow-lg shadow-indigo-600/20"
-                >
-                  Accept & Chat
+                <button onClick={() => handleDeclineThunderbolt(req.id)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition">Pass</button>
+                <button onClick={() => handleAcceptThunderbolt(req)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm bg-indigo-600 text-white hover:bg-indigo-500 transition shadow-lg shadow-indigo-600/20">Accept & Chat</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      )}
+
+      {/* SECTION 2: NEW LIKES (INSTAGRAM STYLE) */}
+      {likes.length > 0 && (
+      <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+        <div className="flex items-center gap-3 mb-6 pl-2">
+          <i className="fa-solid fa-heart text-emerald-400 text-xl"></i>
+          <h3 className="text-xl font-bold text-white">People Who Liked You</h3>
+          <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{likes.length}</span>
+        </div>
+
+        <div className="space-y-3">
+          {likes.map((like) => (
+            <div key={like.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                    <h4 className="text-white font-bold text-base">{like.senderName}</h4>
+                    <span className="text-[9px] font-medium text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20">Wants to connect</span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1"><i className="fa-solid fa-book-open text-slate-500 mr-1.5"></i>{like.senderTarget} • {like.senderLocation}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => handlePassLike(like.id)} className="w-10 h-10 rounded-full bg-slate-800 text-slate-400 hover:text-white transition flex items-center justify-center"><i className="fa-solid fa-xmark"></i></button>
+                <button onClick={() => handleMatchLike(like)} className="px-4 h-10 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 transition font-bold text-sm shadow-lg shadow-emerald-600/20 flex items-center gap-2">
+                    <i className="fa-solid fa-check"></i> Match Back
                 </button>
               </div>
             </div>
           ))}
         </div>
       </div>
+      )}
+
     </div>
   );
 };
