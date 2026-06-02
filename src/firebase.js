@@ -5,6 +5,8 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 //Import the Auth packages
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
+// 1. ADDED: Import Storage for profile pictures
+import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -23,3 +25,6 @@ export const db = getFirestore(app);
 // 2. Export the Auth variables so our Login page can use them
 export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
+
+// 3. ADDED: Export Storage so the Profile page can upload images
+export const storage = getStorage(app);
