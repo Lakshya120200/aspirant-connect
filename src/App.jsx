@@ -11,6 +11,8 @@ import Login from './components/Login';
 import Chat from './components/Chat';
 import Onboarding from './components/Onboarding'; // <--- Brought in the new form!
 
+import Inbox from './components/Inbox';
+
 function App() {
   const [user, setUser] = useState(null);
   const [hasProfile, setHasProfile] = useState(false); // <--- New state tracker
@@ -48,7 +50,7 @@ function App() {
     return <Onboarding onProfileCreated={() => setHasProfile(true)} user={user} />;
   }
 
- // 3. If everything is complete, show the app dashboard!
+// 3. If everything is complete, show the app dashboard!
   return (
     <div className="bg-slate-950 min-h-screen text-white selection:bg-indigo-500 selection:text-white pb-20">
       <Navbar />
@@ -56,8 +58,11 @@ function App() {
       
       <MatchSimulator onConnect={(peer) => setActivePeer(peer)} />
       
-      <div className="mt-12">
-        {/* We added onClearPeer so the Chat can reset itself to Global */}
+      <div className="mt-12 px-4 sm:px-6 lg:px-8">
+        
+        {/* THE NEW INBOX: When you click Accept, it sets the active peer for the chat! */}
+        <Inbox onAccept={(peer) => setActivePeer(peer)} />
+
         <Chat peer={activePeer} onClearPeer={() => setActivePeer(null)} />
       </div>
     </div>
