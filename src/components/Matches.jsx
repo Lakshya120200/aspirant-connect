@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, getDocs, or, and } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, collectionGroup, or } from 'firebase/firestore';
 
 const Matches = ({ onSelectMatch, onViewProfile }) => {
   const [matches, setMatches] = useState([]);
@@ -12,63 +12,66 @@ const Matches = ({ onSelectMatch, onViewProfile }) => {
     const myId = auth.currentUser.uid;
     const matchMap = new Map();
 
-    const syncMatchesState = (peerId, userData, lastTime) => {
-      const existing = matchMap.get(peerId) || { id: peerId };
-      matchMap.set(peerId, { 
-        ...existing, 
-        ...userData, 
-        lastMessageAt: Math.max(lastTime, existing.lastMessageAt || 0) 
-      });
-      setMatches(Array.from(matchMap.values()).sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0)));
+    const updateMatches = (id, data = {}, lastTime = 0) => {
+      // GHOST USER FIX: If this person is not in your Match list yet, AND we aren't loading their 
+      // profile data right now (meaning this update came from a random message), ignore them completely.
+      if (!matchMap.has(id) && !data.name) return;
+
+      const existing = matchMap.get(id) || { id };
+      matchMap.set(id, { ...existing, ...data, lastMessageAt: Math.max(lastTime, existing.lastMessageAt || 0) });
+      
+      const sorted = Array.from(matchMap.values()).sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
+      setMatches(sorted);
     };
 
-    // 1. Connection Listener (Matches the logic that populates your match bar)
+    // 1. Connection Listeners (Safely split up to fix the InvalidQuery crash)
     const qSwipes = query(collection(db, 'swipes'), or(where('from', '==', myId), where('to', '==', myId)));
-    const qThunder = query(collection(db, 'thunderbolts'), and(or(where('from', '==', myId), where('to', '==', myId)), where('status', '==', 'active')));
+    const qThunderFrom = query(collection(db, 'thunderbolts'), where('from', '==', myId), where('status', '==', 'active'));
+    const qThunderTo = query(collection(db, 'thunderbolts'), where('to', '==', myId), where('status', '==', 'active'));
+
+    const handleConnectionSnap = async (snap) => {
+      for (const d of snap.docs) {
+        const data = d.data();
+        const otherId = data.from === myId ? data.to : data.from;
+        if (!matchMap.has(otherId)) {
+          const snapUser = await getDoc(doc(db, 'users', otherId));
+          if (snapUser.exists()) updateMatches(otherId, snapUser.data());
+        }
+      }
+    };
 
     const unsubs = [
-      onSnapshot(qSwipes, async (snap) => {
-        for (const d of snap.docs) {
-          const data = d.data();
-          const otherId = data.from === myId ? data.to : data.from;
-          if (!matchMap.has(otherId)) {
-            const snapUser = await getDoc(doc(db, 'users', otherId));
-            if (snapUser.exists()) syncMatchesState(otherId, snapUser.data(), 0);
-          }
-        }
-      }),
-      onSnapshot(qThunder, async (snap) => {
-        for (const d of snap.docs) {
-          const data = d.data();
-          const otherId = data.from === myId ? data.to : data.from;
-          if (!matchMap.has(otherId)) {
-            const snapUser = await getDoc(doc(db, 'users', otherId));
-            if (snapUser.exists()) syncMatchesState(otherId, snapUser.data(), 0);
-          }
-        }
-      })
+      onSnapshot(qSwipes, handleConnectionSnap),
+      onSnapshot(qThunderFrom, handleConnectionSnap),
+      onSnapshot(qThunderTo, handleConnectionSnap)
     ];
 
-    // 2. Unread Message Listener (Restored feature)
-    // We target only the rooms of people already in our matchMap
-    const unsubMessages = onSnapshot(collection(db, 'rooms'), (snap) => {
-      snap.docs.forEach(roomDoc => {
-        const roomId = roomDoc.id;
-        if (roomId.includes(myId)) {
-          const peerId = roomId.split('_').find(id => id !== myId);
-          if (peerId && matchMap.has(peerId)) {
-            // Check unread messages for this specific room
-            const unreadQ = query(collection(db, 'rooms', roomId, 'messages'), where('to', '==', myId), where('read', '==', false));
-            getDocs(unreadQ).then(msgSnap => {
-               setUnreadCounts(prev => ({ ...prev, [peerId]: msgSnap.size }));
-            });
+    // 2. YOUR ORIGINAL PERFECT MESSAGE LISTENER (Restores Sorting & Red Bubbles)
+    const unsubMessages = onSnapshot(query(collectionGroup(db, 'messages')), (snap) => {
+      const counts = {};
+      snap.docs.forEach(d => {
+        const msg = d.data();
+        if (d.ref.parent?.parent) {
+          const roomId = d.ref.parent.parent.id; 
+          if (roomId.includes(myId)) {
+            const peerId = roomId.split('_').find(id => id !== myId);
+            if (peerId) {
+              const time = msg.createdAt?.toMillis() || 0;
+              if (msg.to === myId && msg.read === false) {
+                counts[peerId] = (counts[peerId] || 0) + 1;
+              }
+              // This triggers your sorting automatically
+              updateMatches(peerId, {}, time);
+            }
           }
         }
       });
+      setUnreadCounts(counts);
     });
 
-    setLoading(false);
+    const timer = setTimeout(() => setLoading(false), 800);
     return () => {
+      clearTimeout(timer);
       unsubs.forEach(u => u());
       unsubMessages();
     };
@@ -85,9 +88,9 @@ const Matches = ({ onSelectMatch, onViewProfile }) => {
         ) : (
           <div className="flex gap-6 overflow-x-auto pb-4">
             {matches.map(match => (
-              <div key={match.id} className="flex flex-col items-center gap-2 min-w-[72px] relative">
+              <div key={match.id} className="flex flex-col items-center gap-2 min-w-[72px] relative group">
                 <button onClick={() => onSelectMatch(match)} className="relative hover:scale-105 transition">
-                  {/* RESTORED: Red unread badge */}
+                  {/* RED UNREAD BADGE */}
                   {unreadCounts[match.id] > 0 && (
                     <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center animate-pulse border-2 border-slate-900">
                       {unreadCounts[match.id]}
