@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db, auth, storage } from '../firebase';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, getDocs, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import EmojiPicker from 'emoji-picker-react';
 
@@ -8,11 +8,28 @@ const Chat = ({ peer, onClearPeer }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [peerStatus, setPeerStatus] = useState('offline'); // New state for live presence
+  const [peerStatus, setPeerStatus] = useState('offline');
   
   const fileInputRef = useRef(null);
   const scrollRef = useRef();
   const emojiPickerRef = useRef(null);
+
+  // Mark messages as read when opening a private chat
+  useEffect(() => {
+    const markAsRead = async () => {
+      if (!peer || !auth.currentUser) return;
+      const roomId = getRoomId();
+      const q = query(
+        collection(db, 'rooms', roomId, 'messages'), 
+        where('to', '==', auth.currentUser.uid), 
+        where('read', '==', false)
+      );
+      const snapshot = await getDocs(q);
+      snapshot.docs.forEach((docSnap) => updateDoc(docSnap.ref, { read: true }));
+    };
+
+    if (peer) markAsRead();
+  }, [peer, messages]); // Added messages as dependency to clear badge immediately on receive
 
   // Close emoji picker when clicking outside
   useEffect(() => {
@@ -25,18 +42,15 @@ const Chat = ({ peer, onClearPeer }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showEmojiPicker]);
 
-  // REAL-TIME PRESENCE LISTENER (New Feature)
+  // Presence Listener
   useEffect(() => {
     if (!peer || !peer.id) return;
-    
-    // Listen directly to the peer's user document
     const unsubPresence = onSnapshot(doc(db, 'users', peer.id), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setPeerStatus(data.isOnline ? 'online' : 'offline');
       }
     });
-
     return () => unsubPresence();
   }, [peer]);
 
@@ -45,14 +59,12 @@ const Chat = ({ peer, onClearPeer }) => {
     return auth.currentUser.uid < peer.id ? `${auth.currentUser.uid}_${peer.id}` : `${peer.id}_${auth.currentUser.uid}`;
   };
 
-  // FETCH MESSAGES (Handles both Global and Private)
+  // Message Listener
   useEffect(() => {
     let q;
     if (!peer) {
-      // No peer selected = Global Study Room
       q = query(collection(db, 'messages'), orderBy('createdAt', 'asc'));
     } else {
-      // Peer selected = Private Match Room
       const roomId = getRoomId();
       if (!roomId) return;
       q = query(collection(db, 'rooms', roomId, 'messages'), orderBy('createdAt', 'asc'));
@@ -61,7 +73,6 @@ const Chat = ({ peer, onClearPeer }) => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setMessages(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
-    
     return () => unsubscribe();
   }, [peer]);
 
@@ -70,27 +81,32 @@ const Chat = ({ peer, onClearPeer }) => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // SEND MESSAGE (Handles both Global and Private)
+  // SEND MESSAGE
   const sendMessage = async (e) => {
     e.preventDefault();
     if (newMessage.trim() === "") return;
 
-    const payload = {
-        text: newMessage,
-        createdAt: serverTimestamp(),
-        uid: auth.currentUser.uid,
-        senderName: auth.currentUser.displayName || "Aspirant"
-    };
+    try {
+        const payload = {
+            text: newMessage,
+            createdAt: serverTimestamp(),
+            from: auth.currentUser.uid,
+            senderName: auth.currentUser.displayName || "Aspirant",
+            read: false // Critical: Matches.jsx listens for this
+        };
 
-    if (!peer) {
-      await addDoc(collection(db, 'messages'), payload); // Global
-    } else {
-      await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), payload); // Private
+        if (!peer) {
+            await addDoc(collection(db, 'messages'), payload);
+        } else {
+            await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), { ...payload, to: peer.id });
+        }
+        setNewMessage("");
+    } catch (error) {
+        console.error("Error sending message:", error);
     }
-    setNewMessage("");
   };
 
-  // UPLOAD IMAGE (Handles both Global and Private)
+  // UPLOAD IMAGE
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -103,14 +119,15 @@ const Chat = ({ peer, onClearPeer }) => {
       const payload = {
         imageURL: downloadURL,
         createdAt: serverTimestamp(),
-        uid: auth.currentUser.uid,
-        senderName: auth.currentUser.displayName || "Aspirant"
+        from: auth.currentUser.uid,
+        senderName: auth.currentUser.displayName || "Aspirant",
+        read: false // Critical: Ensures image messages also trigger badges
       };
 
       if (!peer) {
-        await addDoc(collection(db, 'messages'), payload); // Global
+        await addDoc(collection(db, 'messages'), payload);
       } else {
-        await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), payload); // Private
+        await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), { ...payload, to: peer.id });
       }
     } catch (error) {
       console.error("Error uploading image:", error);
@@ -124,7 +141,6 @@ const Chat = ({ peer, onClearPeer }) => {
 
   return (
     <div className="flex flex-col h-[500px] bg-[#0B0F19] border border-slate-800 rounded-2xl overflow-hidden max-w-4xl mx-auto shadow-2xl relative">
-      
       {showEmojiPicker && (
         <div ref={emojiPickerRef} className="absolute bottom-20 left-4 z-50">
           <EmojiPicker onEmojiClick={(e) => { setNewMessage(prev => prev + e.emoji); setShowEmojiPicker(false); }} theme="dark" />
@@ -132,16 +148,11 @@ const Chat = ({ peer, onClearPeer }) => {
       )}
 
       <div className="px-6 py-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
-        {/* Dynamic Header: Global vs Private */}
-        <h3 className="font-bold text-white text-lg">
-          {peer ? `Room: ${peer.name}` : 'Global Study Room'}
-        </h3>
-        
-        {/* ONLY show presence and close button IF in a private match */}
+        <h3 className="font-bold text-white text-lg">{peer ? `Room: ${peer.name}` : 'Global Study Room'}</h3>
         {peer && (
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${peerStatus === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-slate-600'}`} />
+              <div className={`w-2 h-2 rounded-full ${peerStatus === 'online' ? 'bg-emerald-500' : 'bg-slate-600'}`} />
               <span className="text-[12px] text-slate-400 capitalize">{peerStatus}</span>
             </div>
             <button onClick={onClearPeer} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition">Close</button>
@@ -151,7 +162,7 @@ const Chat = ({ peer, onClearPeer }) => {
 
       <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-4">
         {messages.map((msg) => {
-          const isMe = msg.uid === auth.currentUser?.uid;
+          const isMe = msg.from === auth.currentUser?.uid;
           return (
             <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
               {!isMe && <span className="text-[10px] text-slate-500 mb-1 ml-1">{msg.senderName}</span>}
@@ -173,16 +184,14 @@ const Chat = ({ peer, onClearPeer }) => {
         <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="text-slate-400 hover:text-white px-1">
           <i className="fa-solid fa-face-smile"></i>
         </button>
-
         <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
         <button type="button" onClick={() => fileInputRef.current.click()} className="text-slate-400 hover:text-white px-1">
             <i className="fa-solid fa-image"></i>
         </button>
-
         <input 
           type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Type your message..."
-          className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-white focus:outline-none"
         />
         <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl font-bold">Send</button>
       </form>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, collectionGroup } from 'firebase/firestore';
 
 const Matches = ({ onSelectMatch }) => {
   const [matches, setMatches] = useState([]);
@@ -12,57 +12,69 @@ const Matches = ({ onSelectMatch }) => {
     const myId = auth.currentUser.uid;
     const matchMap = new Map();
 
-    // Unified function to update match state
-    const updateMatches = async (id) => {
-      if (matchMap.has(id)) return;
-      const snap = await getDoc(doc(db, 'users', id));
-      if (snap.exists()) {
-        matchMap.set(id, { id, ...snap.data() });
-        setMatches(Array.from(matchMap.values()));
-      }
+    // Helper: Update match data and re-sort
+    const updateMatches = (id, data = {}, lastTime = 0) => {
+      const existing = matchMap.get(id) || { id };
+      const updated = { 
+        ...existing, 
+        ...data, 
+        lastMessageAt: Math.max(lastTime, existing.lastMessageAt || 0) 
+      };
+      
+      matchMap.set(id, updated);
+      // Sort: Always keep most active at index 0
+      const sorted = Array.from(matchMap.values()).sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
+      setMatches(sorted);
     };
 
-    // 1. Listen for ALL connection types (Swipes & Thunderbolts)
-    const queries = [
+    // 1. Connection Listener
+    const connectionQueries = [
       query(collection(db, 'swipes'), where('to', '==', myId)),
       query(collection(db, 'swipes'), where('from', '==', myId)),
       query(collection(db, 'thunderbolts'), where('to', '==', myId)),
       query(collection(db, 'thunderbolts'), where('from', '==', myId))
     ];
 
-    const unsubs = queries.map(q => onSnapshot(q, async (snap) => {
+    const unsubs = connectionQueries.map(q => onSnapshot(q, async (snap) => {
       for (const d of snap.docs) {
         const data = d.data();
         const otherId = data.from === myId ? data.to : data.from;
-        
-        // Check if mutual connection exists
-        const mutualCheck = await getDoc(doc(db, 'swipes', `${myId}_${otherId}`));
-        const mutualCheckReverse = await getDoc(doc(db, 'swipes', `${otherId}_${myId}`));
-        
-        if (mutualCheck.exists() || mutualCheckReverse.exists() || data.status === 'active') {
-          updateMatches(otherId);
-        }
+        const snapUser = await getDoc(doc(db, 'users', otherId));
+        if (snapUser.exists()) updateMatches(otherId, snapUser.data());
       }
     }));
 
-    // 2. Listen for Unread Messages (New Feature)
-    const unsubUnread = onSnapshot(
-      query(collection(db, 'messages'), where('to', '==', myId), where('read', '==', false)), 
-      (snap) => {
-        const counts = {};
-        snap.docs.forEach(d => {
-          const senderId = d.data().from;
-          counts[senderId] = (counts[senderId] || 0) + 1;
-        });
-        setUnreadCounts(counts);
-      }
-    );
+    // 2. Optimized Message Listener
+    const unsubMessages = onSnapshot(query(collectionGroup(db, 'messages')), (snap) => {
+      const counts = {};
+      snap.docs.forEach(d => {
+        const msg = d.data();
+        if (d.ref.parent && d.ref.parent.parent) {
+          const roomId = d.ref.parent.parent.id; 
+          
+          if (roomId.includes(myId)) {
+            const peerId = roomId.split('_').find(id => id !== myId);
+            if (peerId) {
+              const time = msg.createdAt?.toMillis() || 0;
+              
+              // Increment count if it's a new message for me
+              if (msg.to === myId && msg.read === false) {
+                 counts[peerId] = (counts[peerId] || 0) + 1;
+              }
+              
+              updateMatches(peerId, {}, time);
+            }
+          }
+        }
+      });
+      setUnreadCounts(counts);
+    });
 
-    setTimeout(() => setLoading(false), 800);
-
+    const timer = setTimeout(() => setLoading(false), 800);
     return () => {
+      clearTimeout(timer);
       unsubs.forEach(unsub => unsub());
-      unsubUnread();
+      unsubMessages();
     };
   }, []);
 
@@ -71,45 +83,37 @@ const Matches = ({ onSelectMatch }) => {
   return (
     <div className="max-w-4xl mx-auto w-full mb-8 animate-fade-in">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-        <div className="flex items-center gap-3 mb-6 pl-2">
-          <i className="fa-solid fa-user-group text-indigo-400 text-xl"></i>
-          <h3 className="text-xl font-bold text-white">Your Active Matches</h3>
-        </div>
-        
+        <h3 className="text-xl font-bold text-white mb-6 pl-2">Your Active Matches</h3>
         {matches.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-6 text-center">
-                <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 mb-3"><i className="fa-solid fa-ghost"></i></div>
-                <p className="text-sm font-semibold text-slate-400">No active connections yet.</p>
-                <p className="text-[11px] text-slate-500 mt-1">Start swiping or sending Thunderbolts to build your study circle!</p>
-            </div>
+          <p className="text-sm text-slate-400 text-center py-4">No active connections yet.</p>
         ) : (
-            <div className="flex gap-6 overflow-x-auto pb-4">
+          <div className="flex gap-6 overflow-x-auto pb-4">
             {matches.map(match => (
-                <button 
-                key={match.id}
-                onClick={() => onSelectMatch({ id: match.id, name: match.name, target: match.examTarget })}
-                className="flex flex-col items-center gap-2 min-w-[72px] group transition hover:scale-105 relative"
-                >
-                {/* Unread Badge */}
+              <button 
+                key={match.id} 
+                onClick={() => onSelectMatch(match)} 
+                className="flex flex-col items-center gap-2 min-w-[72px] relative transition-all duration-300 hover:scale-105"
+              >
+                {/* Badge: Conditional visibility based on unreadCounts */}
                 {unreadCounts[match.id] > 0 && (
-                    <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-lg z-10 animate-bounce">
-                        {unreadCounts[match.id]}
-                    </div>
+                  <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-md z-10 animate-pulse border-2 border-slate-900">
+                    {unreadCounts[match.id]}
+                  </div>
                 )}
-
+                
                 {match.photoURL ? (
-                    <img src={match.photoURL} alt={match.name} className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500/50 group-hover:border-indigo-400 shadow-lg transition" />
+                  <img src={match.photoURL} alt={match.name} className={`w-16 h-16 rounded-full object-cover border-2 ${unreadCounts[match.id] > 0 ? 'border-rose-500' : 'border-indigo-500/50'} transition-all`} />
                 ) : (
-                    <div className="w-16 h-16 rounded-full bg-slate-950 border-2 border-indigo-500/50 flex items-center justify-center text-xl font-bold text-indigo-400 group-hover:border-indigo-400 group-hover:bg-slate-800 transition shadow-lg">
-                        {(match.name || 'A').charAt(0).toUpperCase()}
-                    </div>
+                  <div className={`w-16 h-16 rounded-full bg-slate-950 border-2 ${unreadCounts[match.id] > 0 ? 'border-rose-500' : 'border-indigo-500/50'} flex items-center justify-center font-bold text-indigo-400`}>
+                    {match.name?.[0]?.toUpperCase()}
+                  </div>
                 )}
-                <span className="text-xs font-semibold text-slate-300 group-hover:text-white truncate w-full text-center">
-                    {match.name ? match.name.split(' ')[0] : 'Aspirant'}
+                <span className="text-xs font-semibold text-slate-300 truncate w-full text-center">
+                  {match.name?.split(' ')[0]}
                 </span>
-                </button>
+              </button>
             ))}
-            </div>
+          </div>
         )}
       </div>
     </div>
