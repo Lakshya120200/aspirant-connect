@@ -3,7 +3,8 @@ import { db, auth } from '../firebase';
 import { collection, getDocs, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
 const MatchSimulator = ({ onConnect }) => {
-  const [profiles, setProfiles] = useState({ UPSC: [], NEET: [], SSC: [] });
+  // 1. All 4 buckets are perfectly defined here
+  const [profiles, setProfiles] = useState({ UPSC: [], NEET: [], FMGE: [], SSC: [] });
   const [loading, setLoading] = useState(true);
 
   const [step, setStep] = useState(1);
@@ -22,6 +23,10 @@ const MatchSimulator = ({ onConnect }) => {
           ],
           NEET: [
               { id: "mock_neet_1", name: "Drishya Nair", age: 19, location: "Kota Hub", detail: "Dropper batch / Organic Chemistry specialist", prompt: "Let's test each other on complex plant physiology diagrams." }
+          ],
+          // 2. FMGE Mock Profile added so the screen isn't empty!
+          FMGE: [
+              { id: "mock_fmge_1", name: "Aarav Gupta", age: 24, location: "Gautam Buddha Nagar", detail: "December Target / PSM Focus", prompt: "Need to grind Anatomy and PSM recalls before the test." }
           ],
           SSC: [
               { id: "mock_ssc_1", name: "Vikram Singh", age: 23, location: "Mukherjee Nagar", detail: "CGL track / Quant revision enthusiast", prompt: "Can swap advanced math shortcut keys for English vocabulary tests." }
@@ -42,10 +47,13 @@ const MatchSimulator = ({ onConnect }) => {
             isRealUser: true 
           };
 
+          // 3. Routing real users into all 4 buckets properly
           if (data.examTarget === 'UPSC Civil Services') {
             loadedProfiles.UPSC.unshift(realUser);
-          } else if (data.examTarget === 'NEET UG' || data.examTarget === 'FMGE') {
+          } else if (data.examTarget === 'NEET UG') {
             loadedProfiles.NEET.unshift(realUser);
+          } else if (data.examTarget === 'FMGE') {
+            loadedProfiles.FMGE.unshift(realUser);
           } else if (data.examTarget === 'SSC CGL') {
             loadedProfiles.SSC.unshift(realUser);
           }
@@ -77,27 +85,23 @@ const MatchSimulator = ({ onConnect }) => {
     setCurrentCardIndex(prev => prev + 1);
   };
 
-  // CLEANED UP HANDLE CHECK FUNCTION!
   const handleCheck = async () => {
     const currentObj = profiles[selectedStream][currentCardIndex];
     const myId = auth.currentUser.uid;
     const theirId = currentObj.id;
 
     try {
-      // 1. Save the "Yes" to the database
       await setDoc(doc(db, 'swipes', `${myId}_${theirId}`), {
         from: myId,
         to: theirId,
         timestamp: serverTimestamp()
       });
 
-      // 2. Check for a mutual match
       const mutualSwipe = await getDoc(doc(db, 'swipes', `${theirId}_${myId}`));
       
       if (mutualSwipe.exists()) {
         alert(`🎉 MUTUAL MATCH! You and ${currentObj.name} liked each other. A private room has been unlocked in your Inbox.`);
       } else {
-        // 3. Temporary alert so you know it worked
         alert(`✅ You liked ${currentObj.name}! (This swipe is now safely stored in your database).`);
       }
       
@@ -146,7 +150,8 @@ const MatchSimulator = ({ onConnect }) => {
     if (loading) return <div className="text-white text-center mt-20 font-bold animate-pulse">Loading active peers...</div>;
 
     const list = profiles[selectedStream];
-    if (currentCardIndex >= list.length) {
+    // Safety check to prevent undefined crashes!
+    if (!list || currentCardIndex >= list.length) {
       return (
         <div className="text-center p-6 space-y-3 animate-fade-in">
           <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mx-auto text-lg"><i className="fa-solid fa-hourglass-end"></i></div>
@@ -194,21 +199,41 @@ const MatchSimulator = ({ onConnect }) => {
                     <p className="text-slate-400 leading-relaxed">
                         We built a mini-simulator directly into our website to show you exactly how effortlessly you can sort through the noise and unlock a relatable community. 
                     </p>
+                    <div className="space-y-3 pt-2">
+                        <div className="flex items-start gap-3">
+                            <div className="mt-1 flex-shrink-0 w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">1</div>
+                            <p className="text-sm text-slate-300"><span className="font-semibold text-white">Select Your Focus:</span> Tell the app which exam is dominating your calendar.</p>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <div className="mt-1 flex-shrink-0 w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">2</div>
+                            <p className="text-sm text-slate-300"><span className="font-semibold text-white">Declare Your Vibe:</span> Specify your study workflow and routine patterns.</p>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <div className="mt-1 flex-shrink-0 w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">3</div>
+                            <p className="text-sm text-slate-300"><span className="font-semibold text-white">Unlock Safe Matches:</span> Instantly review profiles of real, localized peers.</p>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Right Simulator Window Column */}
                 <div className="lg:col-span-7 flex justify-center">
                     <div className="w-full max-w-[390px] h-[640px] rounded-[48px] border-[10px] border-slate-800 bg-slate-950 shadow-2xl relative overflow-hidden flex flex-col">
                         
+                        {/* Top Hardware Bar Simulation */}
                         <div className="h-6 bg-slate-950 flex items-center justify-between px-8 pt-2 text-[10px] text-slate-400 font-medium z-20">
                             <span>11:23 PM</span>
                             <div className="w-24 h-4 bg-black rounded-b-xl absolute top-0 left-1/2 -translate-x-1/2"></div>
+                            <div className="flex items-center gap-1.5">
+                                <i className="fa-solid fa-signal"></i>
+                                <i className="fa-solid fa-wifi"></i>
+                                <i className="fa-solid fa-battery-three-quarters"></i>
+                            </div>
                         </div>
 
                         <div className="flex-1 p-6 overflow-y-auto flex flex-col justify-between text-left">
                             
                             {/* ========================================= */}
-                            {/* RESTORED STEP 1 VIEW (WITH ICONS & TEXT)  */}
+                            {/* STEP 1 VIEW  */}
                             {/* ========================================= */}
                             {step === 1 && (
                             <div className="space-y-6 flex-1 flex flex-col justify-center animate-fade-in">
@@ -250,12 +275,12 @@ const MatchSimulator = ({ onConnect }) => {
                             )}
 
                             {/* ========================================= */}
-                            {/* RESTORED STEP 2 VIEW (WITH ICONS & TEXT)  */}
+                            {/* STEP 2 VIEW  */}
                             {/* ========================================= */}
                             {step === 2 && (
                             <div className="space-y-6 flex-1 flex flex-col justify-center animate-fade-in">
                                 <div className="text-center space-y-2">
-                                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${selectedStream === 'UPSC' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : selectedStream === 'NEET' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${selectedStream === 'UPSC' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : selectedStream === 'NEET' || selectedStream === 'FMGE' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
                                         {selectedStream} Stream
                                     </span>
                                     <h4 className="text-xl font-extrabold text-white">What's your study style?</h4>
@@ -287,7 +312,9 @@ const MatchSimulator = ({ onConnect }) => {
                             </div>
                             )}
 
-                            {/* STEP 3 VIEW (WITH THE NEW DB BUTTONS) */}
+                            {/* ========================================= */}
+                            {/* STEP 3 VIEW  */}
+                            {/* ========================================= */}
                             {step === 3 && (
                             <div className="flex-1 flex flex-col justify-between animate-fade-in">
                                 <div className="flex items-center justify-between border-b border-slate-900 pb-3 mb-2">
@@ -299,15 +326,12 @@ const MatchSimulator = ({ onConnect }) => {
                                     {renderCard()}
                                 </div>
 
-                                {!loading && currentCardIndex < profiles[selectedStream].length && (
+                                {!loading && profiles[selectedStream] && currentCardIndex < profiles[selectedStream].length && (
                                 <div className="flex items-center justify-center gap-6 pt-4 border-t border-slate-900">
-                                    {/* X BUTTON (Pass) */}
                                     <button onClick={handlePass} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center transition shadow-lg cursor-pointer"><i className="fa-solid fa-xmark text-lg"></i></button>
                                     
-                                    {/* THUNDERBOLT BUTTON (1-Message Lock) */}
                                     <button onClick={handleThunderbolt} className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center transition shadow-xl hover:scale-105 active:scale-95 cursor-pointer"><i className="fa-solid fa-bolt text-xl"></i></button>
                                     
-                                    {/* CHECK BUTTON (Mutual Swipe) */}
                                     <button onClick={handleCheck} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 flex items-center justify-center transition shadow-lg cursor-pointer"><i className="fa-solid fa-check text-lg"></i></button>
                                 </div>
                                 )}
