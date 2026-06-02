@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, getDocs, deleteDoc, writeBatch } from 'firebase/firestore'; 
+// Added enableNetwork to the imports
+import { doc, getDoc, collection, query, where, getDocs, deleteDoc, writeBatch, enableNetwork } from 'firebase/firestore'; 
 
 // Components
 import Navbar from './components/Navbar';
@@ -61,7 +62,7 @@ function App() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [viewingProfile, setViewingProfile] = useState(null);
   
-  // NEW: Global Toast State
+  // Global Toast State
   const [toast, setToast] = useState(null);
   const triggerToast = (msg) => {
     setToast(msg);
@@ -69,6 +70,7 @@ function App() {
   };
 
   useEffect(() => {
+    // 1. Auth Listener
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -77,7 +79,21 @@ function App() {
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+
+    // 2. NEW: Wake-up Listener for Firebase (handles tab sleeping)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Force Firebase to reconnect instantly when the user comes back to the tab
+        enableNetwork(db).catch((err) => console.error("Firebase reconnect error:", err));
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const handleUnmatch = async (peerId) => {
@@ -137,7 +153,6 @@ function App() {
           <MatchSimulator onConnect={(peer) => setActivePeer(peer)} />
           
           <div className="max-w-7xl mx-auto px-4 space-y-8 pt-8">
-            {/* Pass triggerToast as a prop to Inbox */}
             <Inbox onAccept={(peer) => setActivePeer(peer)} onTriggerToast={triggerToast} />
             
             <Matches 
