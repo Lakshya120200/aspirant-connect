@@ -3,10 +3,12 @@ import { auth, db } from '../firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
-const Navbar = () => {
+// 1. ADDED: onOpenProfile prop to accept the command from App.jsx
+const Navbar = ({ onOpenProfile }) => {
   const [user, setUser] = useState(null);
   const [profileName, setProfileName] = useState("");
   const [examTarget, setExamTarget] = useState("");
+  const [photoURL, setPhotoURL] = useState(""); // 2. ADDED: State to hold the profile picture
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -17,12 +19,15 @@ const Navbar = () => {
         const userDocSnap = await getDoc(userDocRef);
         
         if (userDocSnap.exists()) {
-          setProfileName(userDocSnap.data().name);
-          setExamTarget(userDocSnap.data().examTarget);
+          const data = userDocSnap.data();
+          setProfileName(data.name);
+          setExamTarget(data.examTarget);
+          setPhotoURL(data.photoURL || ""); // 3. ADDED: Fetch the photo if they uploaded one
         }
       } else {
         setProfileName("");
         setExamTarget("");
+        setPhotoURL("");
       }
     });
 
@@ -55,15 +60,24 @@ const Navbar = () => {
           {user && profileName && (
             <div className="flex items-center gap-4">
               
-              {/* Profile Badge */}
-              <div className="hidden sm:flex items-center gap-3 bg-slate-900 border border-slate-800 py-1.5 px-3 rounded-full">
+              {/* Profile Badge - 4. UPDATED: Made it clickable with nice hover effects! */}
+              <div 
+                onClick={onOpenProfile}
+                className="hidden sm:flex items-center gap-3 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 py-1.5 px-3 rounded-full cursor-pointer transition group"
+              >
                 <div className="flex flex-col text-right">
-                  <span className="text-sm font-bold text-white leading-tight">{profileName}</span>
-                  <span className="text-[10px] font-medium text-indigo-400">{examTarget}</span>
+                  <span className="text-sm font-bold text-white leading-tight group-hover:text-indigo-400 transition">{profileName}</span>
+                  <span className="text-[10px] font-medium text-slate-400">{examTarget}</span>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold border border-slate-700">
-                  {profileName.charAt(0).toUpperCase()}
-                </div>
+
+                {/* 5. UPDATED: Render the photo if it exists, otherwise fallback to the initial */}
+                {photoURL ? (
+                  <img src={photoURL} alt="Profile" className="w-8 h-8 rounded-full object-cover border border-slate-700 group-hover:border-indigo-400 transition" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold border border-slate-700 group-hover:border-indigo-400 transition">
+                    {profileName.charAt(0).toUpperCase()}
+                  </div>
+                )}
               </div>
 
               {/* Logout Button */}
