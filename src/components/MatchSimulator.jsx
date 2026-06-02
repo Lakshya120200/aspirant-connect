@@ -47,6 +47,7 @@ const MatchSimulator = ({ onConnect }) => {
             location: data.studyBase || "India",
             detail: `Targeting ${data.targetYear || 'Next Exam'}`,
             prompt: `Looking for a serious study partner for ${data.examTarget}.`,
+            photoURL: data.photoURL || null, // <-- ADDED: Fetching the photo
             isRealUser: true 
           };
 
@@ -174,22 +175,41 @@ const MatchSimulator = ({ onConnect }) => {
     const currentObj = list[currentCardIndex];
     return (
       <div className="w-full bg-gradient-to-b from-slate-900 to-slate-950 p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-4 flex flex-col justify-between h-72 relative overflow-hidden">
+          
+          {/* <-- ADDED: BACKGROUND FADE PHOTO EFFECT --> */}
+          {currentObj.photoURL && (
+              <div className="absolute inset-0 z-0 opacity-[0.15] mix-blend-luminosity bg-cover bg-center transition-all duration-500" style={{ backgroundImage: `url(${currentObj.photoURL})` }}></div>
+          )}
+
           {currentObj.isRealUser && (
-            <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[9px] font-bold px-3 py-1 rounded-bl-xl shadow-lg">
+            <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[9px] font-bold px-3 py-1 rounded-bl-xl shadow-lg z-20">
               REAL USER
             </div>
           )}
-          <div className="space-y-1.5 mt-2">
-              <div className="flex items-center justify-between">
-                  <span className="text-base font-black text-white">{currentObj.name} <span className="text-xs font-normal text-slate-400">({currentObj.age})</span></span>
-                  <span className="text-[10px] text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full"><i className="fa-solid fa-location-dot mr-1 text-slate-500"></i> {currentObj.location}</span>
+          
+          <div className="space-y-1.5 mt-2 relative z-10">
+              <div className="flex items-center gap-3 mb-2">
+                  {/* <-- ADDED: CARD AVATAR LOGIC --> */}
+                  {currentObj.photoURL ? (
+                      <img src={currentObj.photoURL} alt={currentObj.name} className="w-12 h-12 rounded-full object-cover border-2 border-indigo-500/30 shadow-lg" />
+                  ) : (
+                      <div className="w-12 h-12 rounded-full bg-slate-800 border-2 border-indigo-500/30 flex items-center justify-center text-lg font-bold text-indigo-400 shadow-lg">
+                          {currentObj.name.charAt(0).toUpperCase()}
+                      </div>
+                  )}
+                  <div>
+                      <span className="text-base font-black text-white block leading-tight">{currentObj.name} <span className="text-xs font-normal text-slate-400">({currentObj.age})</span></span>
+                      <span className="text-[10px] text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full inline-flex items-center mt-1"><i className="fa-solid fa-location-dot mr-1 text-slate-500"></i> {currentObj.location}</span>
+                  </div>
               </div>
               <p className="text-xs font-semibold text-indigo-400">{currentObj.detail}</p>
           </div>
-          <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-900/60 flex-1 flex items-center">
+          
+          <div className="bg-slate-950/80 backdrop-blur p-3.5 rounded-2xl border border-slate-900/60 flex-1 flex items-center relative z-10">
               <p className="text-xs text-slate-300 italic leading-relaxed">"{currentObj.prompt}"</p>
           </div>
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+          
+          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 relative z-10">
               <i className="fa-solid fa-shield text-indigo-500/40"></i> {currentObj.isRealUser ? 'Verified Database Profile' : 'Verified Student Profile'}
           </div>
       </div>
@@ -378,7 +398,7 @@ const MatchSimulator = ({ onConnect }) => {
                                 </div>
 
                                 {!loading && profiles[selectedStream] && currentCardIndex < profiles[selectedStream].length && (
-                                <div className="flex items-center justify-center gap-6 pt-4 border-t border-slate-900">
+                                <div className="flex items-center justify-center gap-6 pt-4 border-t border-slate-900 mt-2">
                                     <button onClick={handlePass} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center transition shadow-lg cursor-pointer"><i className="fa-solid fa-xmark text-lg"></i></button>
                                     
                                     <button onClick={triggerThunderboltModal} className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center transition shadow-xl hover:scale-105 active:scale-95 cursor-pointer"><i className="fa-solid fa-bolt text-xl"></i></button>

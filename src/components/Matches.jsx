@@ -101,9 +101,14 @@ const Matches = ({ onSelectMatch }) => {
                 onClick={() => onSelectMatch({ id: match.id, name: match.name, target: match.examTarget })}
                 className="flex flex-col items-center gap-2 min-w-[72px] group transition hover:scale-105"
                 >
-                <div className="w-16 h-16 rounded-full bg-slate-950 border-2 border-indigo-500/50 flex items-center justify-center text-xl font-bold text-indigo-400 group-hover:border-indigo-400 group-hover:bg-slate-800 transition shadow-lg">
-                    {match.name.charAt(0).toUpperCase()}
-                </div>
+                {/* <-- ADDED: PROFILE PICTURE LOGIC HERE --> */}
+                {match.photoURL ? (
+                    <img src={match.photoURL} alt={match.name} className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500/50 group-hover:border-indigo-400 shadow-lg transition" />
+                ) : (
+                    <div className="w-16 h-16 rounded-full bg-slate-950 border-2 border-indigo-500/50 flex items-center justify-center text-xl font-bold text-indigo-400 group-hover:border-indigo-400 group-hover:bg-slate-800 transition shadow-lg">
+                        {match.name.charAt(0).toUpperCase()}
+                    </div>
+                )}
                 <span className="text-xs font-semibold text-slate-300 group-hover:text-white truncate w-full text-center">
                     {match.name.split(' ')[0]}
                 </span>

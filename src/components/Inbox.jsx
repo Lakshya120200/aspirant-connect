@@ -32,6 +32,7 @@ const Inbox = ({ onAccept }) => {
             message: requestData.message,
             senderName: senderData.name,
             senderTarget: senderData.examTarget,
+            photoURL: senderData.photoURL || null // <-- ADDED: Fetching the photo
           });
         }
       }
@@ -61,7 +62,8 @@ const Inbox = ({ onAccept }) => {
               senderId: likeData.from,
               senderName: senderData.name,
               senderTarget: senderData.examTarget,
-              senderLocation: senderData.studyBase || 'India'
+              senderLocation: senderData.studyBase || 'India',
+              photoURL: senderData.photoURL || null // <-- ADDED: Fetching the photo
             });
           }
         }
@@ -131,7 +133,11 @@ const Inbox = ({ onAccept }) => {
           {requests.map((req) => (
             <div key={req.id} className="bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
               <div>
-                <h4 className="text-white font-bold text-lg mb-1">{req.senderName}</h4>
+                {/* <-- ADDED: PROFILE PICTURE FOR THUNDERBOLTS --> */}
+                <h4 className="text-white font-bold text-lg mb-1 flex items-center">
+                    {req.photoURL && <img src={req.photoURL} alt={req.senderName} className="inline w-6 h-6 rounded-full object-cover mr-2 border border-indigo-500/30"/>}
+                    {req.senderName}
+                </h4>
                 <p className="text-xs text-indigo-400 mb-4">{req.senderTarget} Aspirant</p>
                 <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 mb-6 relative">
                   <i className="fa-solid fa-quote-left text-slate-700 absolute top-2 left-2 text-[10px]"></i>
@@ -161,14 +167,26 @@ const Inbox = ({ onAccept }) => {
         <div className="space-y-3">
           {likes.map((like) => (
             <div key={like.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                    <h4 className="text-white font-bold text-base">{like.senderName}</h4>
-                    <span className="text-[9px] font-medium text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20">Wants to connect</span>
+              
+              {/* <-- ADDED: FLEX CONTAINER AND AVATAR FOR LIKES --> */}
+              <div className="flex items-center gap-3">
+                {like.photoURL ? (
+                    <img src={like.photoURL} alt={like.senderName} className="w-10 h-10 rounded-full object-cover border border-emerald-500/30" />
+                ) : (
+                    <div className="w-10 h-10 bg-slate-800 border border-emerald-500/30 rounded-full flex items-center justify-center text-sm font-bold text-slate-400 flex-shrink-0">
+                        {like.senderName.charAt(0).toUpperCase()}
+                    </div>
+                )}
+                <div>
+                  <div className="flex items-center gap-2">
+                      <h4 className="text-white font-bold text-base">{like.senderName}</h4>
+                      <span className="text-[9px] font-medium text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20">Wants to connect</span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1"><i className="fa-solid fa-book-open text-slate-500 mr-1.5"></i>{like.senderTarget} • {like.senderLocation}</p>
                 </div>
-                <p className="text-xs text-slate-400 mt-1"><i className="fa-solid fa-book-open text-slate-500 mr-1.5"></i>{like.senderTarget} • {like.senderLocation}</p>
               </div>
-              <div className="flex items-center gap-2">
+
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <button onClick={() => handlePassLike(like.id)} className="w-10 h-10 rounded-full bg-slate-800 text-slate-400 hover:text-white transition flex items-center justify-center"><i className="fa-solid fa-xmark"></i></button>
                 <button onClick={() => handleMatchLike(like)} className="px-4 h-10 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 transition font-bold text-sm shadow-lg shadow-emerald-600/20 flex items-center gap-2">
                     <i className="fa-solid fa-check"></i> Match Back
