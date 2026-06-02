@@ -170,3 +170,4 @@ const Onboarding = ({ onProfileCreated, user }) => {
     </div>
   );
 };
+export default Onboarding;
