@@ -1,46 +1,94 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { db, auth } from '../firebase';
+import { collection, getDocs } from 'firebase/firestore';
 
-const MatchSimulator = () => {
-  // Mock peer profiles structured by exam streams
-  const peerProfiles = {
-    UPSC: [
-        { name: "Rahul Sharma", age: 25, location: "Old Rajinder Nagar", detail: "Targeting 2026 / Economy Mains focused", prompt: "Need someone to trade Daily Answer Reviews for GS-3." },
-        { name: "Priya Mehta", age: 24, location: "West Patel Nagar", detail: "PSIR Optional / Srishti Deshmukh notes tracker", prompt: "Looking for an accountability partner for 5 AM silent study sessions." },
-        { name: "Aman Verma", age: 26, location: "Rajendra Place", detail: "Third Attempt veteran / Geography focus", prompt: "Let's crack the tricky analytical statements on the standard test series together." }
-    ],
-    NEET: [
-        { name: "Drishya Nair", age: 19, location: "Kota Hub", detail: "Dropper batch / Organic Chemistry specialist", prompt: "Let's test each other on complex plant physiology diagrams." },
-        { name: "Kabir Bajaj", age: 20, location: "New Delhi Central", detail: "Physics-heavy revisions path", prompt: "Looking for a pomodoro partner to track high-yield mock mock results." }
-    ],
-    SSC: [
-        { name: "Vikram Singh", age: 23, location: "Mukherjee Nagar", detail: "CGL track / Quant revision enthusiast", prompt: "Can swap advanced math shortcut keys for English vocabulary tests." },
-        { name: "Ananya Das", age: 24, location: "Patna Center", detail: "General Awareness focus path", prompt: "Need an active daily reminder circle to cross check static current trends." }
-    ]
-  };
+const MatchSimulator = ({ onConnect }) => {
+  // We use State now because it takes a second to load from the database
+  const [profiles, setProfiles] = useState({ UPSC: [], NEET: [], SSC: [] });
+  const [loading, setLoading] = useState(true);
 
-  // State to track where the user is in the simulator
   const [step, setStep] = useState(1);
   const [selectedStream, setSelectedStream] = useState(null);
   const [selectedVibe, setSelectedVibe] = useState(null);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
 
+  // FETCH REAL USERS FROM FIRESTORE
+  useEffect(() => {
+    const fetchRealUsers = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'users'));
+        
+        // Start with our mock data as a fallback so the screen is never empty
+        let loadedProfiles = {
+          UPSC: [
+              { id: "mock_upsc_1", name: "Rahul Sharma", age: 25, location: "Old Rajinder Nagar", detail: "Targeting 2026 / Economy Mains focused", prompt: "Need someone to trade Daily Answer Reviews for GS-3." },
+              { id: "mock_upsc_2", name: "Priya Mehta", age: 24, location: "West Patel Nagar", detail: "PSIR Optional / Srishti Deshmukh notes tracker", prompt: "Looking for an accountability partner for 5 AM silent study sessions." }
+          ],
+          NEET: [
+              { id: "mock_neet_1", name: "Drishya Nair", age: 19, location: "Kota Hub", detail: "Dropper batch / Organic Chemistry specialist", prompt: "Let's test each other on complex plant physiology diagrams." }
+          ],
+          SSC: [
+              { id: "mock_ssc_1", name: "Vikram Singh", age: 23, location: "Mukherjee Nagar", detail: "CGL track / Quant revision enthusiast", prompt: "Can swap advanced math shortcut keys for English vocabulary tests." }
+          ]
+        };
+
+        querySnapshot.forEach((doc) => {
+          // Don't show the user their own profile!
+          if (doc.id === auth.currentUser?.uid) return; 
+
+          const data = doc.data();
+          
+          // Format the real database data to match our beautiful UI cards
+          const realUser = {
+            id: doc.id,
+            name: data.name || "Anonymous",
+            age: data.age,
+            location: data.studyBase || "India",
+            detail: `Targeting ${data.targetYear || 'Next Exam'}`,
+            prompt: `Looking for a serious study partner for ${data.examTarget}.`,
+            isRealUser: true // A flag so we know it's a real person!
+          };
+
+          // Sort them into the right streams
+          if (data.examTarget === 'UPSC Civil Services') {
+            loadedProfiles.UPSC.unshift(realUser); // unshift puts real users at the front of the line!
+          } else if (data.examTarget === 'NEET UG' || data.examTarget === 'FMGE') {
+            loadedProfiles.NEET.unshift(realUser);
+          } else if (data.examTarget === 'SSC CGL') {
+            loadedProfiles.SSC.unshift(realUser);
+          }
+        });
+
+        setProfiles(loadedProfiles);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchRealUsers();
+  }, []);
+
   const handleStreamSelect = (stream) => {
     setSelectedStream(stream);
-    setStep(2); // Move to Step 2
+    setStep(2); 
   };
 
   const handleVibeSelect = (vibe) => {
     setSelectedVibe(vibe);
     setCurrentCardIndex(0);
-    setStep(3); // Move to Step 3
+    setStep(3); 
   };
 
   const nextCard = () => {
     setCurrentCardIndex(prev => prev + 1);
   };
 
-  const connectAlert = () => {
-    alert("⚡ Connection Request Triggered! In the real live deployment, your accountability invitation details will securely ping their account without exposing your personal phone number or email address.");
+  const triggerConnect = () => {
+    const list = profiles[selectedStream];
+    const currentObj = list[currentCardIndex];
+    if (onConnect) onConnect({ ...currentObj, target: selectedStream });
     nextCard();
   };
 
@@ -52,7 +100,9 @@ const MatchSimulator = () => {
   };
 
   const renderCard = () => {
-    const list = peerProfiles[selectedStream];
+    if (loading) return <div className="text-white text-center mt-20 font-bold animate-pulse">Loading active peers...</div>;
+
+    const list = profiles[selectedStream];
     if (currentCardIndex >= list.length) {
       return (
         <div className="text-center p-6 space-y-3 animate-fade-in">
@@ -64,10 +114,18 @@ const MatchSimulator = () => {
     }
     const currentObj = list[currentCardIndex];
     return (
-      <div className="w-full bg-gradient-to-b from-slate-900 to-slate-950 p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-4 flex flex-col justify-between h-72">
-          <div className="space-y-1.5">
+      <div className="w-full bg-gradient-to-b from-slate-900 to-slate-950 p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-4 flex flex-col justify-between h-72 relative overflow-hidden">
+          
+          {/* Highlight real users with a verified badge */}
+          {currentObj.isRealUser && (
+            <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[9px] font-bold px-3 py-1 rounded-bl-xl shadow-lg">
+              REAL USER
+            </div>
+          )}
+
+          <div className="space-y-1.5 mt-2">
               <div className="flex items-center justify-between">
-                  <span className="text-base font-black text-white">{currentObj.name}</span>
+                  <span className="text-base font-black text-white">{currentObj.name} <span className="text-xs font-normal text-slate-400">({currentObj.age})</span></span>
                   <span className="text-[10px] text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full"><i className="fa-solid fa-location-dot mr-1 text-slate-500"></i> {currentObj.location}</span>
               </div>
               <p className="text-xs font-semibold text-indigo-400">{currentObj.detail}</p>
@@ -76,7 +134,7 @@ const MatchSimulator = () => {
               <p className="text-xs text-slate-300 italic leading-relaxed">"{currentObj.prompt}"</p>
           </div>
           <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
-              <i className="fa-solid fa-shield text-indigo-500/40"></i> Verified Student Profile
+              <i className="fa-solid fa-shield text-indigo-500/40"></i> {currentObj.isRealUser ? 'Verified Database Profile' : 'Verified Student Profile'}
           </div>
       </div>
     );
@@ -141,28 +199,18 @@ const MatchSimulator = () => {
                                     <button onClick={() => handleStreamSelect('UPSC')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-indigo-500 group flex items-center justify-between transition cursor-pointer">
                                         <div>
                                             <p className="font-bold text-white group-hover:text-indigo-400 transition">UPSC Civil Services</p>
-                                            <p className="text-[11px] text-slate-400">IAS, IPS, IFS Trackers</p>
                                         </div>
                                         <i className="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-indigo-400 transition"></i>
                                     </button>
                                     <button onClick={() => handleStreamSelect('NEET')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-rose-500 group flex items-center justify-between transition cursor-pointer">
                                         <div>
-                                            <p className="font-bold text-white group-hover:text-rose-400 transition">NEET UG</p>
-                                            <p className="text-[11px] text-slate-400">Medical Aspirants Forum</p>
-                                        </div>
-                                        <i className="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-rose-400 transition"></i>
-                                    </button>
-                                    <button onClick={() => handleStreamSelect('NEET')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-rose-500 group flex items-center justify-between transition cursor-pointer">
-                                        <div>
-                                            <p className="font-bold text-white group-hover:text-rose-400 transition">FMGE Aspirants</p>
-                                            <p className="text-[11px] text-slate-400">Foreign Medical Aspirants Forum</p>
+                                            <p className="font-bold text-white group-hover:text-rose-400 transition">NEET UG & FMGE</p>
                                         </div>
                                         <i className="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-rose-400 transition"></i>
                                     </button>
                                     <button onClick={() => handleStreamSelect('SSC')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-amber-500 group flex items-center justify-between transition cursor-pointer">
                                         <div>
                                             <p className="font-bold text-white group-hover:text-amber-400 transition">SSC CGL</p>
-                                            <p className="text-[11px] text-slate-400">Combined Graduate Level</p>
                                         </div>
                                         <i className="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-amber-400 transition"></i>
                                     </button>
@@ -174,32 +222,20 @@ const MatchSimulator = () => {
                             {step === 2 && (
                             <div className="space-y-6 flex-1 flex flex-col justify-center animate-fade-in">
                                 <div className="text-center space-y-2">
-                                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${selectedStream === 'UPSC' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : selectedStream === 'NEET' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
-                                        {selectedStream} Stream
-                                    </span>
                                     <h4 className="text-xl font-extrabold text-white">What's your study style?</h4>
-                                    <p className="text-xs text-slate-400">We pair you based on routine compatibility to make connection easy.</p>
+                                    <p className="text-xs text-slate-400">We pair you based on routine compatibility.</p>
                                 </div>
                                 <div className="space-y-3">
                                     <button onClick={() => handleVibeSelect('Night Owl')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-indigo-500 group flex items-center gap-4 transition cursor-pointer">
                                         <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-sm"><i className="fa-solid fa-moon"></i></div>
                                         <div>
                                             <p className="font-bold text-white text-sm">Night Owl Operations</p>
-                                            <p className="text-[11px] text-slate-400">Grinding through 11 PM to 4 AM schedules</p>
                                         </div>
                                     </button>
                                     <button onClick={() => handleVibeSelect('Early Bird')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-indigo-500 group flex items-center gap-4 transition cursor-pointer">
                                         <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-sm"><i className="fa-solid fa-sun"></i></div>
                                         <div>
                                             <p className="font-bold text-white text-sm">Early Morning Sprint</p>
-                                            <p className="text-[11px] text-slate-400">Fresh hours from 5 AM onwards</p>
-                                        </div>
-                                    </button>
-                                    <button onClick={() => handleVibeSelect('Doubt Solver')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-indigo-500 group flex items-center gap-4 transition cursor-pointer">
-                                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm"><i className="fa-solid fa-comments-question"></i></div>
-                                        <div>
-                                            <p className="font-bold text-white text-sm">Doubt-Solving Partner</p>
-                                            <p className="text-[11px] text-slate-400">Active debate, test reviews & notes breakdown</p>
                                         </div>
                                     </button>
                                 </div>
@@ -210,7 +246,7 @@ const MatchSimulator = () => {
                             {step === 3 && (
                             <div className="flex-1 flex flex-col justify-between animate-fade-in">
                                 <div className="flex items-center justify-between border-b border-slate-900 pb-3 mb-2">
-                                    <span className="text-xs font-bold text-indigo-400">Active {selectedStream} Peers | {selectedVibe}</span>
+                                    <span className="text-xs font-bold text-indigo-400">Active {selectedStream} Peers</span>
                                     <button onClick={resetSimulator} className="text-[11px] text-slate-500 hover:text-white transition cursor-pointer"><i className="fa-solid fa-rotate-right mr-1"></i> Reset</button>
                                 </div>
                                 
@@ -218,10 +254,10 @@ const MatchSimulator = () => {
                                     {renderCard()}
                                 </div>
 
-                                {currentCardIndex < peerProfiles[selectedStream].length && (
+                                {!loading && currentCardIndex < profiles[selectedStream].length && (
                                 <div className="flex items-center justify-center gap-6 pt-4 border-t border-slate-900">
                                     <button onClick={nextCard} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-rose-400 hover:border-rose-500/30 flex items-center justify-center transition shadow-lg cursor-pointer"><i className="fa-solid fa-xmark text-lg"></i></button>
-                                    <button onClick={connectAlert} className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center transition shadow-xl shadow-indigo-600/30 hover:scale-105 active:scale-95 cursor-pointer"><i className="fa-solid fa-bolt text-xl"></i></button>
+                                    <button onClick={triggerConnect} className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center transition shadow-xl shadow-indigo-600/30 hover:scale-105 active:scale-95 cursor-pointer"><i className="fa-solid fa-bolt text-xl"></i></button>
                                     <button onClick={nextCard} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30 flex items-center justify-center transition shadow-lg cursor-pointer"><i className="fa-solid fa-check text-lg"></i></button>
                                 </div>
                                 )}
