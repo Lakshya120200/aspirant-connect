@@ -14,7 +14,7 @@ const Chat = ({ peer, onClearPeer }) => {
   const scrollRef = useRef();
   const emojiPickerRef = useRef(null);
 
-  // Mark messages as read when opening a private chat
+  // FIXED: Mark as read only once per peer selection (prevents loops)
   useEffect(() => {
     const markAsRead = async () => {
       if (!peer || !auth.currentUser) return;
@@ -29,9 +29,9 @@ const Chat = ({ peer, onClearPeer }) => {
     };
 
     if (peer) markAsRead();
-  }, [peer, messages]); // Added messages as dependency to clear badge immediately on receive
+  }, [peer]); 
 
-  // Close emoji picker when clicking outside
+  // Close emoji picker
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
@@ -81,62 +81,46 @@ const Chat = ({ peer, onClearPeer }) => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // SEND MESSAGE
   const sendMessage = async (e) => {
     e.preventDefault();
     if (newMessage.trim() === "") return;
-
     try {
         const payload = {
             text: newMessage,
             createdAt: serverTimestamp(),
             from: auth.currentUser.uid,
             senderName: auth.currentUser.displayName || "Aspirant",
-            read: false // Critical: Matches.jsx listens for this
+            read: false 
         };
-
         if (!peer) {
             await addDoc(collection(db, 'messages'), payload);
         } else {
             await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), { ...payload, to: peer.id });
         }
         setNewMessage("");
-    } catch (error) {
-        console.error("Error sending message:", error);
-    }
+    } catch (error) { console.error("Error sending:", error); }
   };
 
-  // UPLOAD IMAGE
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     try {
       const storageRef = ref(storage, `chat_images/${Date.now()}_${file.name}`);
       const snapshot = await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(snapshot.ref);
-
       const payload = {
         imageURL: downloadURL,
         createdAt: serverTimestamp(),
         from: auth.currentUser.uid,
         senderName: auth.currentUser.displayName || "Aspirant",
-        read: false // Critical: Ensures image messages also trigger badges
+        read: false
       };
-
       if (!peer) {
         await addDoc(collection(db, 'messages'), payload);
       } else {
         await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), { ...payload, to: peer.id });
       }
-    } catch (error) {
-      console.error("Error uploading image:", error);
-    }
-  };
-
-  const formatTime = (timestamp) => {
-    if (!timestamp) return "";
-    return new Date(timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (error) { console.error("Error uploading image:", error); }
   };
 
   return (
@@ -166,34 +150,25 @@ const Chat = ({ peer, onClearPeer }) => {
           return (
             <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
               {!isMe && <span className="text-[10px] text-slate-500 mb-1 ml-1">{msg.senderName}</span>}
-              <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-[14px] ${isMe ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-200 rounded-bl-none'}`}>
-                {msg.imageURL ? (
-                    <img src={msg.imageURL} alt="shared" className="rounded-lg max-w-full" />
-                ) : (
-                    <p>{msg.text}</p>
-                )}
+              <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-[14px] ${isMe ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'}`}>
+                {msg.imageURL ? <img src={msg.imageURL} alt="shared" className="rounded-lg max-w-full" /> : <p>{msg.text}</p>}
               </div>
-              <span className="text-[9px] text-slate-600 mt-1 px-1">{formatTime(msg.createdAt)}</span>
             </div>
           );
         })}
         <div ref={scrollRef}></div> 
       </div>
 
-      <form onSubmit={sendMessage} className="p-4 bg-slate-900 border-t border-slate-800 flex gap-3 items-center">
-        <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="text-slate-400 hover:text-white px-1">
-          <i className="fa-solid fa-face-smile"></i>
-        </button>
+      <form onSubmit={sendMessage} className="p-3 bg-slate-900 border-t border-slate-800 flex gap-2 items-center shrink-0">
+        <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="text-slate-400 hover:text-white px-1 shrink-0"><i className="fa-solid fa-face-smile"></i></button>
         <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
-        <button type="button" onClick={() => fileInputRef.current.click()} className="text-slate-400 hover:text-white px-1">
-            <i className="fa-solid fa-image"></i>
-        </button>
+        <button type="button" onClick={() => fileInputRef.current.click()} className="text-slate-400 hover:text-white px-1 shrink-0"><i className="fa-solid fa-image"></i></button>
         <input 
           type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="Type your message..."
-          className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-white focus:outline-none"
+          placeholder="Message..."
+          className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-white focus:outline-none text-sm"
         />
-        <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl font-bold">Send</button>
+        <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl font-bold text-sm shrink-0">Send</button>
       </form>
     </div>
   );
