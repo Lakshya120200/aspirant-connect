@@ -77,29 +77,28 @@ const MatchSimulator = ({ onConnect }) => {
     setCurrentCardIndex(prev => prev + 1);
   };
 
-  // ==========================================
-  // THE NEW MATCH ENGINE LOGIC
-  // ==========================================
-
-  // 1. The "Check" Button (Silent Yes)
+  // CLEANED UP HANDLE CHECK FUNCTION!
   const handleCheck = async () => {
     const currentObj = profiles[selectedStream][currentCardIndex];
     const myId = auth.currentUser.uid;
     const theirId = currentObj.id;
 
     try {
-      // Save my "Yes" swipe to the database
+      // 1. Save the "Yes" to the database
       await setDoc(doc(db, 'swipes', `${myId}_${theirId}`), {
         from: myId,
         to: theirId,
         timestamp: serverTimestamp()
       });
 
-      // Instantly check if they already swiped "Yes" on me!
+      // 2. Check for a mutual match
       const mutualSwipe = await getDoc(doc(db, 'swipes', `${theirId}_${myId}`));
+      
       if (mutualSwipe.exists()) {
         alert(`🎉 MUTUAL MATCH! You and ${currentObj.name} liked each other. A private room has been unlocked in your Inbox.`);
-        // Note: In Phase 3, we will route them to the real Inbox instead of an alert.
+      } else {
+        // 3. Temporary alert so you know it worked
+        alert(`✅ You liked ${currentObj.name}! (This swipe is now safely stored in your database).`);
       }
       
       nextCard();
@@ -109,20 +108,15 @@ const MatchSimulator = ({ onConnect }) => {
     }
   };
 
-  // 2. The "Thunderbolt" Button (1-Message Lock)
   const handleThunderbolt = async () => {
     const currentObj = profiles[selectedStream][currentCardIndex];
     const myId = auth.currentUser.uid;
     const theirId = currentObj.id;
 
-    // Trigger a browser popup to grab the icebreaker
     const message = window.prompt(`Send exactly one icebreaker message to ${currentObj.name}. (You cannot message them again until they reply!)`);
-    
-    // If they click cancel or leave it blank, stop the function
     if (!message || message.trim() === "") return; 
 
     try {
-      // Save the connection request with a "pending_reply" lock
       await setDoc(doc(db, 'thunderbolts', `${myId}_${theirId}`), {
         from: myId,
         to: theirId,
@@ -130,7 +124,6 @@ const MatchSimulator = ({ onConnect }) => {
         status: 'pending_reply',
         timestamp: serverTimestamp()
       });
-
       alert(`⚡ Thunderbolt sent to ${currentObj.name}! It is now locked in your Inbox waiting for their reply.`);
       nextCard();
     } catch (error) {
@@ -138,9 +131,7 @@ const MatchSimulator = ({ onConnect }) => {
     }
   };
 
-  // 3. The "X" Button (Pass)
   const handlePass = () => {
-    // For now, we just skip. We don't need to bloat the database with "No"s yet.
     nextCard();
   };
 
@@ -216,39 +207,81 @@ const MatchSimulator = ({ onConnect }) => {
 
                         <div className="flex-1 p-6 overflow-y-auto flex flex-col justify-between text-left">
                             
-                            {/* STEP 1 VIEW */}
+                            {/* ========================================= */}
+                            {/* RESTORED STEP 1 VIEW (WITH ICONS & TEXT)  */}
+                            {/* ========================================= */}
                             {step === 1 && (
                             <div className="space-y-6 flex-1 flex flex-col justify-center animate-fade-in">
                                 <div className="text-center space-y-2">
                                     <h4 className="text-xl font-extrabold text-white">Welcome, Comrade!</h4>
-                                    <p className="text-xs text-slate-400">What major checkpoint are you clearing next?</p>
+                                    <p className="text-xs text-slate-400">Let's strip away the isolation. What major checkpoint are you clearing next?</p>
                                 </div>
                                 <div className="space-y-3">
-                                    <button onClick={() => handleStreamSelect('UPSC')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-indigo-500 group transition">
-                                        <p className="font-bold text-white">UPSC Civil Services</p>
+                                    <button onClick={() => handleStreamSelect('UPSC')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-indigo-500 group flex items-center justify-between transition cursor-pointer">
+                                        <div>
+                                            <p className="font-bold text-white group-hover:text-indigo-400 transition">UPSC Civil Services</p>
+                                            <p className="text-[11px] text-slate-400">IAS, IPS, IFS Trackers</p>
+                                        </div>
+                                        <i className="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-indigo-400 transition"></i>
                                     </button>
-                                    <button onClick={() => handleStreamSelect('NEET')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-rose-500 group transition">
-                                        <p className="font-bold text-white">NEET UG & FMGE</p>
+                                    <button onClick={() => handleStreamSelect('NEET')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-rose-500 group flex items-center justify-between transition cursor-pointer">
+                                        <div>
+                                            <p className="font-bold text-white group-hover:text-rose-400 transition">NEET UG</p>
+                                            <p className="text-[11px] text-slate-400">Medical Aspirants Forum</p>
+                                        </div>
+                                        <i className="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-rose-400 transition"></i>
                                     </button>
-                                    <button onClick={() => handleStreamSelect('SSC')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-amber-500 group transition">
-                                        <p className="font-bold text-white">SSC CGL</p>
+                                    <button onClick={() => handleStreamSelect('FMGE')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-rose-500 group flex items-center justify-between transition cursor-pointer">
+                                        <div>
+                                            <p className="font-bold text-white group-hover:text-rose-400 transition">FMGE Aspirants</p>
+                                            <p className="text-[11px] text-slate-400">Foreign Medical Aspirants Forum</p>
+                                        </div>
+                                        <i className="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-rose-400 transition"></i>
+                                    </button>
+                                    <button onClick={() => handleStreamSelect('SSC')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-amber-500 group flex items-center justify-between transition cursor-pointer">
+                                        <div>
+                                            <p className="font-bold text-white group-hover:text-amber-400 transition">SSC CGL</p>
+                                            <p className="text-[11px] text-slate-400">Combined Graduate Level</p>
+                                        </div>
+                                        <i className="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-amber-400 transition"></i>
                                     </button>
                                 </div>
                             </div>
                             )}
 
-                            {/* STEP 2 VIEW */}
+                            {/* ========================================= */}
+                            {/* RESTORED STEP 2 VIEW (WITH ICONS & TEXT)  */}
+                            {/* ========================================= */}
                             {step === 2 && (
                             <div className="space-y-6 flex-1 flex flex-col justify-center animate-fade-in">
                                 <div className="text-center space-y-2">
+                                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${selectedStream === 'UPSC' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : selectedStream === 'NEET' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                                        {selectedStream} Stream
+                                    </span>
                                     <h4 className="text-xl font-extrabold text-white">What's your study style?</h4>
+                                    <p className="text-xs text-slate-400">We pair you based on routine compatibility to make connection easy.</p>
                                 </div>
                                 <div className="space-y-3">
-                                    <button onClick={() => handleVibeSelect('Night Owl')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-indigo-500 group transition">
-                                        <p className="font-bold text-white">Night Owl Operations</p>
+                                    <button onClick={() => handleVibeSelect('Night Owl')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-indigo-500 group flex items-center gap-4 transition cursor-pointer">
+                                        <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-sm"><i className="fa-solid fa-moon"></i></div>
+                                        <div>
+                                            <p className="font-bold text-white text-sm">Night Owl Operations</p>
+                                            <p className="text-[11px] text-slate-400">Grinding through 11 PM to 4 AM schedules</p>
+                                        </div>
                                     </button>
-                                    <button onClick={() => handleVibeSelect('Early Bird')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-indigo-500 group transition">
-                                        <p className="font-bold text-white">Early Morning Sprint</p>
+                                    <button onClick={() => handleVibeSelect('Early Bird')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-indigo-500 group flex items-center gap-4 transition cursor-pointer">
+                                        <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-sm"><i className="fa-solid fa-sun"></i></div>
+                                        <div>
+                                            <p className="font-bold text-white text-sm">Early Morning Sprint</p>
+                                            <p className="text-[11px] text-slate-400">Fresh hours from 5 AM onwards</p>
+                                        </div>
+                                    </button>
+                                    <button onClick={() => handleVibeSelect('Doubt Solver')} className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left hover:border-indigo-500 group flex items-center gap-4 transition cursor-pointer">
+                                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm"><i className="fa-solid fa-comments-question"></i></div>
+                                        <div>
+                                            <p className="font-bold text-white text-sm">Doubt-Solving Partner</p>
+                                            <p className="text-[11px] text-slate-400">Active debate, test reviews & notes breakdown</p>
+                                        </div>
                                     </button>
                                 </div>
                             </div>
@@ -259,7 +292,7 @@ const MatchSimulator = ({ onConnect }) => {
                             <div className="flex-1 flex flex-col justify-between animate-fade-in">
                                 <div className="flex items-center justify-between border-b border-slate-900 pb-3 mb-2">
                                     <span className="text-xs font-bold text-indigo-400">Active {selectedStream} Peers</span>
-                                    <button onClick={resetSimulator} className="text-[11px] text-slate-500 hover:text-white transition">Reset</button>
+                                    <button onClick={resetSimulator} className="text-[11px] text-slate-500 hover:text-white transition cursor-pointer"><i className="fa-solid fa-rotate-right mr-1"></i> Reset</button>
                                 </div>
                                 
                                 <div className="flex-1 flex items-center justify-center">
@@ -269,13 +302,13 @@ const MatchSimulator = ({ onConnect }) => {
                                 {!loading && currentCardIndex < profiles[selectedStream].length && (
                                 <div className="flex items-center justify-center gap-6 pt-4 border-t border-slate-900">
                                     {/* X BUTTON (Pass) */}
-                                    <button onClick={handlePass} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center transition shadow-lg"><i className="fa-solid fa-xmark text-lg"></i></button>
+                                    <button onClick={handlePass} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center transition shadow-lg cursor-pointer"><i className="fa-solid fa-xmark text-lg"></i></button>
                                     
                                     {/* THUNDERBOLT BUTTON (1-Message Lock) */}
-                                    <button onClick={handleThunderbolt} className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center transition shadow-xl hover:scale-105 active:scale-95"><i className="fa-solid fa-bolt text-xl"></i></button>
+                                    <button onClick={handleThunderbolt} className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center transition shadow-xl hover:scale-105 active:scale-95 cursor-pointer"><i className="fa-solid fa-bolt text-xl"></i></button>
                                     
                                     {/* CHECK BUTTON (Mutual Swipe) */}
-                                    <button onClick={handleCheck} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 flex items-center justify-center transition shadow-lg"><i className="fa-solid fa-check text-lg"></i></button>
+                                    <button onClick={handleCheck} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 flex items-center justify-center transition shadow-lg cursor-pointer"><i className="fa-solid fa-check text-lg"></i></button>
                                 </div>
                                 )}
                             </div>
