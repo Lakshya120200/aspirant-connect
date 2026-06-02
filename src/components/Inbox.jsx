@@ -3,15 +3,22 @@ import { db, auth } from '../firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 
 const Inbox = ({ onAccept }) => {
-  const [requests, setRequests] = useState([]); // Thunderbolts
-  const [likes, setLikes] = useState([]);       // Regular Swipes
+  const [requests, setRequests] = useState([]);
+  const [likes, setLikes] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // TOAST STATE
+  const [toast, setToast] = useState(null);
+  const triggerToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     if (!auth.currentUser) return;
     const myId = auth.currentUser.uid;
 
-    // 1. Listen for incoming Thunderbolts (Messages)
+    // 1. Listen for incoming Thunderbolts
     const qThunder = query(
       collection(db, 'thunderbolts'), 
       where('to', '==', myId),
@@ -38,12 +45,8 @@ const Inbox = ({ onAccept }) => {
       setRequests(pendingRequests);
     });
 
-    // 2. Listen for incoming Swipes (Likes)
-    const qLikes = query(
-      collection(db, 'swipes'),
-      where('to', '==', myId)
-    );
-
+    // 2. Listen for incoming Swipes
+    const qLikes = query(collection(db, 'swipes'), where('to', '==', myId));
     const unsubLikes = onSnapshot(qLikes, async (snapshot) => {
       const pendingLikes = [];
       for (const likeDoc of snapshot.docs) {
@@ -70,26 +73,27 @@ const Inbox = ({ onAccept }) => {
     });
 
     return () => {
-      unsubThunder(); // Now properly defined and callable
+      unsubThunder();
       unsubLikes();
     };
   }, []);
 
-  // --- Thunderbolt Actions ---
+  // Actions
   const handleAcceptThunderbolt = async (request) => {
     try {
       await updateDoc(doc(db, 'thunderbolts', request.id), { status: 'active' });
+      triggerToast("Connected successfully!");
       onAccept({ id: request.senderId, name: request.senderName, target: request.senderTarget });
-    } catch (error) { console.error("Error accepting request:", error); }
+    } catch (error) { console.error("Error accepting:", error); }
   };
 
   const handleDeclineThunderbolt = async (requestId) => {
     try {
       await updateDoc(doc(db, 'thunderbolts', requestId), { status: 'declined' });
-    } catch (error) { console.error("Error declining request:", error); }
+      triggerToast("Request rejected.");
+    } catch (error) { console.error("Error declining:", error); }
   };
 
-  // --- Like Actions ---
   const handleMatchLike = async (like) => {
     try {
       await setDoc(doc(db, 'swipes', `${auth.currentUser.uid}_${like.senderId}`), {
@@ -97,21 +101,31 @@ const Inbox = ({ onAccept }) => {
         to: like.senderId,
         timestamp: serverTimestamp()
       });
+      triggerToast("Matched with " + like.senderName);
       onAccept({ id: like.senderId, name: like.senderName, target: like.senderTarget });
-    } catch (error) { console.error("Error matching like:", error); }
+    } catch (error) { console.error("Error matching:", error); }
   };
 
   const handlePassLike = async (likeId) => {
     try {
       await deleteDoc(doc(db, 'swipes', likeId));
-    } catch (error) { console.error("Error passing like:", error); }
+      triggerToast("Request rejected.");
+    } catch (error) { console.error("Error passing:", error); }
   };
 
   if (loading) return null;
   if (requests.length === 0 && likes.length === 0) return null; 
 
   return (
-    <div className="max-w-4xl mx-auto w-full mb-8 space-y-8 animate-fade-in">
+    <div className="max-w-4xl mx-auto w-full mb-8 space-y-8 animate-fade-in relative">
+      {/* Toast Overlay */}
+      {toast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-indigo-600 text-white px-6 py-2 rounded-full shadow-2xl animate-fade-in text-sm font-bold border border-indigo-400">
+          {toast}
+        </div>
+      )}
+
+      {/* Thunderbolt Section */}
       {requests.length > 0 && (
       <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
@@ -143,6 +157,7 @@ const Inbox = ({ onAccept }) => {
       </div>
       )}
 
+      {/* Likes Section */}
       {likes.length > 0 && (
       <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>

@@ -14,37 +14,24 @@ const Chat = ({ peer, onClearPeer }) => {
   const scrollRef = useRef();
   const emojiPickerRef = useRef(null);
 
-  // FIXED: Mark as read only once per peer selection (prevents loops)
+  // 1. Mark as read (Private chat only)
   useEffect(() => {
+    if (!peer || !auth.currentUser) return;
     const markAsRead = async () => {
-      if (!peer || !auth.currentUser) return;
-      const roomId = getRoomId();
       const q = query(
-        collection(db, 'rooms', roomId, 'messages'), 
+        collection(db, 'rooms', getRoomId(), 'messages'), 
         where('to', '==', auth.currentUser.uid), 
         where('read', '==', false)
       );
       const snapshot = await getDocs(q);
       snapshot.docs.forEach((docSnap) => updateDoc(docSnap.ref, { read: true }));
     };
-
-    if (peer) markAsRead();
+    markAsRead();
   }, [peer]); 
 
-  // Close emoji picker
+  // 2. Presence Listener
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
-        setShowEmojiPicker(false);
-      }
-    };
-    if (showEmojiPicker) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showEmojiPicker]);
-
-  // Presence Listener
-  useEffect(() => {
-    if (!peer || !peer.id) return;
+    if (!peer?.id) return;
     const unsubPresence = onSnapshot(doc(db, 'users', peer.id), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -54,33 +41,32 @@ const Chat = ({ peer, onClearPeer }) => {
     return () => unsubPresence();
   }, [peer]);
 
+  // 3. Helper: Get Room ID
   const getRoomId = () => {
-    if (!peer || !auth.currentUser) return null;
+    if (!peer) return null;
     return auth.currentUser.uid < peer.id ? `${auth.currentUser.uid}_${peer.id}` : `${peer.id}_${auth.currentUser.uid}`;
   };
 
-  // Message Listener
+  // 4. Message Listener (Handles both Global and Private)
   useEffect(() => {
     let q;
     if (!peer) {
       q = query(collection(db, 'messages'), orderBy('createdAt', 'asc'));
     } else {
-      const roomId = getRoomId();
-      if (!roomId) return;
-      q = query(collection(db, 'rooms', roomId, 'messages'), orderBy('createdAt', 'asc'));
+      q = query(collection(db, 'rooms', getRoomId(), 'messages'), orderBy('createdAt', 'asc'));
     }
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setMessages(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
     return () => unsubscribe();
   }, [peer]);
 
-  // Auto-scroll
+  // 5. Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // 6. Send Message Logic
   const sendMessage = async (e) => {
     e.preventDefault();
     if (newMessage.trim() === "") return;
@@ -90,17 +76,19 @@ const Chat = ({ peer, onClearPeer }) => {
             createdAt: serverTimestamp(),
             from: auth.currentUser.uid,
             senderName: auth.currentUser.displayName || "Aspirant",
-            read: false 
+            read: false,
+            ...(peer && { to: peer.id })
         };
         if (!peer) {
             await addDoc(collection(db, 'messages'), payload);
         } else {
-            await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), { ...payload, to: peer.id });
+            await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), payload);
         }
         setNewMessage("");
     } catch (error) { console.error("Error sending:", error); }
   };
 
+  // 7. Image Upload Logic
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -113,24 +101,27 @@ const Chat = ({ peer, onClearPeer }) => {
         createdAt: serverTimestamp(),
         from: auth.currentUser.uid,
         senderName: auth.currentUser.displayName || "Aspirant",
-        read: false
+        read: false,
+        ...(peer && { to: peer.id })
       };
       if (!peer) {
         await addDoc(collection(db, 'messages'), payload);
       } else {
-        await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), { ...payload, to: peer.id });
+        await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), payload);
       }
-    } catch (error) { console.error("Error uploading image:", error); }
+    } catch (error) { console.error("Error uploading:", error); }
   };
 
   return (
     <div className="flex flex-col h-[500px] bg-[#0B0F19] border border-slate-800 rounded-2xl overflow-hidden max-w-4xl mx-auto shadow-2xl relative">
+      {/* Emoji Picker */}
       {showEmojiPicker && (
         <div ref={emojiPickerRef} className="absolute bottom-20 left-4 z-50">
           <EmojiPicker onEmojiClick={(e) => { setNewMessage(prev => prev + e.emoji); setShowEmojiPicker(false); }} theme="dark" />
         </div>
       )}
 
+      {/* Header */}
       <div className="px-6 py-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
         <h3 className="font-bold text-white text-lg">{peer ? `Room: ${peer.name}` : 'Global Study Room'}</h3>
         {peer && (
@@ -144,6 +135,7 @@ const Chat = ({ peer, onClearPeer }) => {
         )}
       </div>
 
+      {/* Messages */}
       <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-4">
         {messages.map((msg) => {
           const isMe = msg.from === auth.currentUser?.uid;
@@ -159,6 +151,7 @@ const Chat = ({ peer, onClearPeer }) => {
         <div ref={scrollRef}></div> 
       </div>
 
+      {/* Input Form */}
       <form onSubmit={sendMessage} className="p-3 bg-slate-900 border-t border-slate-800 flex gap-2 items-center shrink-0">
         <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="text-slate-400 hover:text-white px-1 shrink-0"><i className="fa-solid fa-face-smile"></i></button>
         <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
