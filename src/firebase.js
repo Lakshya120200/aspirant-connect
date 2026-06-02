@@ -1,30 +1,24 @@
-// Import the functions you need from the SDKs you need
+// Import the functions you need from the SDKs
 import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 import { getFirestore } from "firebase/firestore";
-//Import the Auth packages
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-// 1. ADDED: Import Storage for profile pictures
 import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyC-X1h3Wd9WymZ_WzjUMX3hHk-rT3-fgJI",
-  authDomain: "aspirant-connect.firebaseapp.com",
-  projectId: "aspirant-connect",
-  storageBucket: "aspirant-connect.firebasestorage.app",
-  messagingSenderId: "194056946198",
-  appId: "1:194056946198:web:f050f5ee650cb10c2deb37"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
+// Initialize Services
 export const db = getFirestore(app);
-// 2. Export the Auth variables so our Login page can use them
 export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
-
-// 3. ADDED: Export Storage so the Profile page can upload images
 export const storage = getStorage(app);

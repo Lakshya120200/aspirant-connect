@@ -14,7 +14,7 @@ import Inbox from './components/Inbox';
 import Matches from './components/Matches';
 import Profile from './components/Profile';
 import PresenceManager from './components/PresenceManager';
-// Notice: The PendingRequests import has been safely removed from here!
+import Feedback from './components/Feedback'; // Added Feedback import
 
 function App() {
   // State management
@@ -25,8 +25,9 @@ function App() {
   // Tracks the person being chatted with
   const [activePeer, setActivePeer] = useState(null); 
   
-  // View Switcher state
+  // View Switcher states
   const [showProfile, setShowProfile] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false); // Added Feedback state
 
   // Auth & Profile Listener
   useEffect(() => {
@@ -63,13 +64,17 @@ function App() {
       {/* Real-time Presence Tracking */}
       <PresenceManager />
       
-      {/* Navigation - Passing the trigger to open profile */}
-      <Navbar onOpenProfile={() => setShowProfile(true)} />
+      {/* Navigation - Resetting other views when opening profile */}
+      <Navbar onOpenProfile={() => { setShowProfile(true); setShowFeedback(false); }} />
       
-      {/* View Switcher: Profile vs. Dashboard */}
+      {/* Conditional View Rendering */}
       {showProfile ? (
         <div className="pt-12 px-4 sm:px-6 lg:px-8">
             <Profile onBack={() => setShowProfile(false)} />
+        </div>
+      ) : showFeedback ? (
+        <div className="pt-12 px-4 sm:px-6 lg:px-8">
+            <Feedback onBack={() => setShowFeedback(false)} />
         </div>
       ) : (
         <>
@@ -77,14 +82,21 @@ function App() {
           
           <MatchSimulator onConnect={(peer) => setActivePeer(peer)} />
           
-          {/* FIXED: Restored the opening div that accidentally got deleted! */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 pt-8">
-            
-            {/* Inbox, Matches, and Chat components fully retained */}
             <Inbox onAccept={(peer) => setActivePeer(peer)} />
             <Matches onSelectMatch={(peer) => setActivePeer(peer)} />
             
             <Chat peer={activePeer} onClearPeer={() => setActivePeer(null)} />
+            
+            {/* Feedback trigger link */}
+            <div className="text-center py-6">
+                <button 
+                    onClick={() => setShowFeedback(true)}
+                    className="text-slate-500 hover:text-indigo-400 text-sm transition"
+                >
+                    Have feedback or want to see a new feature? Let us know!
+                </button>
+            </div>
           </div>
         </>
       )}
