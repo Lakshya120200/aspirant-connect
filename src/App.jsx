@@ -14,7 +14,7 @@ import Inbox from './components/Inbox';
 import Matches from './components/Matches';
 import Profile from './components/Profile';
 import PresenceManager from './components/PresenceManager';
-import PendingRequests from './components/PendingRequests'; // 1. ADDED IMPORT
+// Notice: The PendingRequests import has been safely removed from here!
 
 function App() {
   // State management
@@ -77,9 +77,8 @@ function App() {
           
           <MatchSimulator onConnect={(peer) => setActivePeer(peer)} />
           
-          <div className="mt-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-            {/* 2. ADDED PENDING REQUESTS COMPONENT */}
-            <PendingRequests />
+          {/* FIXED: Restored the opening div that accidentally got deleted! */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 pt-8">
             
             {/* Inbox, Matches, and Chat components fully retained */}
             <Inbox onAccept={(peer) => setActivePeer(peer)} />

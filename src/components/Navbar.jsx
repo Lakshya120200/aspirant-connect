@@ -58,14 +58,15 @@ const Navbar = ({ onOpenProfile }) => {
 
           {/* RIGHT SIDE: User Profile & Logout */}
           {user && profileName && (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               
-              {/* Profile Badge - 4. UPDATED: Made it clickable with nice hover effects! */}
+              {/* Profile Badge - 4. UPDATED: Removed 'hidden sm:flex' to make it visible on mobile! */}
               <div 
                 onClick={onOpenProfile}
-                className="hidden sm:flex items-center gap-3 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 py-1.5 px-3 rounded-full cursor-pointer transition group"
+                className="flex items-center gap-2 sm:gap-3 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 py-1.5 px-2 sm:px-3 rounded-full cursor-pointer transition group"
               >
-                <div className="flex flex-col text-right">
+                {/* Hidden on ultra-small mobile screens to prevent layout breaking, visible on sm and up */}
+                <div className="hidden sm:flex flex-col text-right">
                   <span className="text-sm font-bold text-white leading-tight group-hover:text-indigo-400 transition">{profileName}</span>
                   <span className="text-[10px] font-medium text-slate-400">{examTarget}</span>
                 </div>
@@ -85,7 +86,7 @@ const Navbar = ({ onOpenProfile }) => {
                 onClick={handleLogout}
                 className="text-sm font-semibold text-slate-400 hover:text-rose-400 transition flex items-center gap-2 px-2"
               >
-                <i className="fa-solid fa-arrow-right-from-bracket"></i>
+                <i className="fa-solid fa-arrow-right-from-bracket text-lg sm:text-base"></i>
                 <span className="hidden sm:inline">Logout</span>
               </button>
             </div>

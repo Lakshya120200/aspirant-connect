@@ -141,7 +141,8 @@ const Profile = ({ onBack }) => {
               <img src={formData.photoURL} alt="Profile" className="w-28 h-28 rounded-full object-cover border-4 border-indigo-500/30" />
             ) : (
               <div className="w-28 h-28 rounded-full bg-slate-800 border-4 border-indigo-500/30 flex items-center justify-center text-4xl text-slate-500 font-bold">
-                {formData.name.charAt(0).toUpperCase()}
+                {/* <-- FIXED: Crash-proof fallback logic added here --> */}
+                {(formData.name || 'Aspirant').charAt(0).toUpperCase()}
               </div>
             )}
             
