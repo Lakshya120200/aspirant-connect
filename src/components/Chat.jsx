@@ -1,81 +1,98 @@
-import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from 'react';
+import { db, auth } from '../firebase';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
 const Chat = () => {
   const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState("");
+  const scrollRef = useRef(); // Helps us automatically scroll to the newest message
 
-  // Listens to Firebase in real-time
   useEffect(() => {
-    const q = query(collection(db, 'messages'), orderBy('createdAt', 'asc'));
+    // Listening to the global 'messages' bucket
+    const q = query(collection(db, 'messages'), orderBy('createdAt'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      let msgs = [];
+      snapshot.forEach((doc) => {
+        msgs.push({ ...doc.data(), id: doc.id });
+      });
+      setMessages(msgs);
     });
     return () => unsubscribe();
   }, []);
 
-  // Sends the message to Google Firestore
+  // Whenever a new message arrives, instantly scroll to the bottom
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
   const sendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (newMessage.trim() === "") return;
+
+    // Grab the unique ID of the person typing
+    const { uid } = auth.currentUser;
 
     await addDoc(collection(db, 'messages'), {
       text: newMessage,
       createdAt: serverTimestamp(),
-      sender: 'Aspirant' 
+      uid: uid, // We attach their ID to the message before saving it
     });
-    setNewMessage('');
+
+    setNewMessage("");
   };
 
   return (
-    <div className="flex flex-col h-[600px] bg-slate-950 text-white mt-10 mx-auto max-w-3xl rounded-2xl overflow-hidden border border-slate-800 shadow-2xl">
+    <div className="flex flex-col h-[500px] bg-[#0B0F19] border border-slate-800 rounded-2xl overflow-hidden max-w-4xl mx-auto shadow-2xl">
       {/* Chat Header */}
-      <div className="bg-slate-800 px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+      <div className="px-6 py-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
         <div>
-          <h3 className="text-lg font-bold text-white">Study Room: Indian Polity</h3>
-          <p className="text-sm text-indigo-400">Online</p>
-        </div>
-        <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center font-bold">
-          AC
+          <h3 className="font-bold text-white text-lg">Study Room: Global</h3>
+          <p className="text-xs text-indigo-400">Live Discussion</p>
         </div>
       </div>
 
-      {/* Messages Feed */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-900">
-        {messages.length === 0 ? (
-          <div className="text-center text-slate-500 mt-10">
-            No messages yet. Start the discussion!
-          </div>
-        ) : (
-          messages.map((msg) => (
-            <div key={msg.id} className="flex flex-col items-end">
-              <div className="bg-indigo-600 text-white px-4 py-2 rounded-2xl rounded-tr-sm max-w-[80%] shadow-md">
-                {msg.text}
+      {/* Messages Area */}
+      <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-4">
+        {messages.map((msg) => {
+          // THE MAGIC LINE: Is this message mine?
+          const isMe = msg.uid === auth.currentUser?.uid;
+
+          return (
+            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+              <div 
+                className={`max-w-[75%] px-5 py-3.5 rounded-2xl text-[15px] leading-relaxed shadow-sm
+                ${isMe 
+                  ? 'bg-indigo-600 text-white rounded-br-none' // My messages (Right, Blue)
+                  : 'bg-slate-800 text-slate-200 rounded-bl-none' // Their messages (Left, Gray)
+                }`}
+              >
+                <p>{msg.text}</p>
               </div>
             </div>
-          ))
-        )}
+          );
+        })}
+        {/* Invisible div to help us scroll to the bottom */}
+        <div ref={scrollRef}></div> 
       </div>
 
-      {/* Message Input Box */}
-      <div className="p-4 bg-slate-950 border-t border-slate-800">
-        <form onSubmit={sendMessage} className="flex gap-3">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Don't think too much just type the message"
-            className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
-          />
-          <button
-            type="submit"
-            className="bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-xl font-bold transition"
-          >
-            Send
-          </button>
-        </form>
-      </div>
+      {/* Input Area */}
+      <form onSubmit={sendMessage} className="p-4 bg-slate-900 border-t border-slate-800 flex gap-3">
+        <input 
+          type="text" 
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          placeholder="Discuss the latest mock test..."
+          className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3.5 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+        />
+        <button 
+          type="submit" 
+          className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3.5 rounded-xl font-semibold transition-colors"
+        >
+          Send
+        </button>
+      </form>
     </div>
   );
 };
