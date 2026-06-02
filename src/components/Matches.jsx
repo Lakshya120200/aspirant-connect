@@ -25,8 +25,8 @@ const Matches = ({ onSelectMatch }) => {
       }
     };
 
-    // 1. Listen for Mutual Swipes
-    const unsubSwipes = onSnapshot(query(collection(db, 'swipes'), where('to', '==', myId)), (snap) => {
+    // 1. Listen for Mutual Swipes (People who liked YOU, and you liked back)
+    const unsubSwipesTo = onSnapshot(query(collection(db, 'swipes'), where('to', '==', myId)), (snap) => {
       snap.docs.forEach(async (d) => {
         const senderId = d.data().from;
         const mutualCheck = await getDoc(doc(db, 'swipes', `${myId}_${senderId}`));
@@ -36,7 +36,19 @@ const Matches = ({ onSelectMatch }) => {
       });
     });
 
-    // 2. Listen for accepted Thunderbolts TO me (filtered on client-side to prevent Firebase index crashes)
+    // 2. Listen for Mutual Swipes (People YOU liked, who just liked you back)
+    const unsubSwipesFrom = onSnapshot(query(collection(db, 'swipes'), where('from', '==', myId)), (snap) => {
+      snap.docs.forEach(async (d) => {
+        const receiverId = d.data().to;
+        // Check if the receiver swiped you back
+        const mutualCheck = await getDoc(doc(db, 'swipes', `${receiverId}_${myId}`));
+        if (mutualCheck.exists()) {
+          fetchProfileAndAdd(receiverId);
+        }
+      });
+    });
+
+    // 3. Listen for accepted Thunderbolts TO me (filtered on client-side to prevent Firebase index crashes)
     const unsubT1 = onSnapshot(query(collection(db, 'thunderbolts'), where('to', '==', myId)), (snap) => {
       snap.docs.forEach(d => {
         if (d.data().status === 'active') {
@@ -45,7 +57,7 @@ const Matches = ({ onSelectMatch }) => {
       });
     });
 
-    // 3. Listen for accepted Thunderbolts FROM me
+    // 4. Listen for accepted Thunderbolts FROM me
     const unsubT2 = onSnapshot(query(collection(db, 'thunderbolts'), where('from', '==', myId)), (snap) => {
       snap.docs.forEach(d => {
         if (d.data().status === 'active') {
@@ -58,7 +70,8 @@ const Matches = ({ onSelectMatch }) => {
     setTimeout(() => setLoading(false), 800);
 
     return () => {
-      unsubSwipes();
+      unsubSwipesTo();
+      unsubSwipesFrom();
       unsubT1();
       unsubT2();
     };

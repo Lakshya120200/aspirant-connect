@@ -12,24 +12,27 @@ const MatchSimulator = ({ onConnect }) => {
   const [selectedVibe, setSelectedVibe] = useState(null);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
 
+  // Modal State for Thunderbolt
+  const [showThunderboltModal, setShowThunderboltModal] = useState(false);
+  const [thunderboltMessage, setThunderboltMessage] = useState("");
+
   useEffect(() => {
     const fetchRealUsers = async () => {
       try {
         const querySnapshot = await getDocs(collection(db, 'users'));
         let loadedProfiles = {
           UPSC: [
-              { id: "mock_upsc_1", name: "Rahul Sharma", age: 25, location: "Old Rajinder Nagar", detail: "Targeting 2026 / Economy Mains focused", prompt: "Need someone to trade Daily Answer Reviews for GS-3." },
-              { id: "mock_upsc_2", name: "Priya Mehta", age: 24, location: "West Patel Nagar", detail: "PSIR Optional / Srishti Deshmukh notes tracker", prompt: "Looking for an accountability partner for 5 AM silent study sessions." }
+              { id: "mock_upsc_1", name: "Rahul Sharma", age: 25, location: "Old Rajinder Nagar", detail: "Targeting 2026 / Economy Mains focused", prompt: "Need someone to trade Daily Answer Reviews for GS-3.", isRealUser: false },
+              { id: "mock_upsc_2", name: "Priya Mehta", age: 24, location: "West Patel Nagar", detail: "PSIR Optional / Srishti Deshmukh notes tracker", prompt: "Looking for an accountability partner for 5 AM silent study sessions.", isRealUser: false }
           ],
           NEET: [
-              { id: "mock_neet_1", name: "Drishya Nair", age: 19, location: "Kota Hub", detail: "Dropper batch / Organic Chemistry specialist", prompt: "Let's test each other on complex plant physiology diagrams." }
+              { id: "mock_neet_1", name: "Drishya Nair", age: 19, location: "Kota Hub", detail: "Dropper batch / Organic Chemistry specialist", prompt: "Let's test each other on complex plant physiology diagrams.", isRealUser: false }
           ],
-          // 2. FMGE Mock Profile added so the screen isn't empty!
           FMGE: [
-              { id: "mock_fmge_1", name: "Aarav Gupta", age: 24, location: "Gautam Buddha Nagar", detail: "December Target / PSM Focus", prompt: "Need to grind Anatomy and PSM recalls before the test." }
+              { id: "mock_fmge_1", name: "Aarav Gupta", age: 24, location: "Gautam Buddha Nagar", detail: "December Target / PSM Focus", prompt: "Need to grind Anatomy and PSM recalls before the test.", isRealUser: false }
           ],
           SSC: [
-              { id: "mock_ssc_1", name: "Vikram Singh", age: 23, location: "Mukherjee Nagar", detail: "CGL track / Quant revision enthusiast", prompt: "Can swap advanced math shortcut keys for English vocabulary tests." }
+              { id: "mock_ssc_1", name: "Vikram Singh", age: 23, location: "Mukherjee Nagar", detail: "CGL track / Quant revision enthusiast", prompt: "Can swap advanced math shortcut keys for English vocabulary tests.", isRealUser: false }
           ]
         };
 
@@ -47,7 +50,7 @@ const MatchSimulator = ({ onConnect }) => {
             isRealUser: true 
           };
 
-          // 3. Routing real users into all 4 buckets properly
+          // Routing real users into all 4 buckets properly
           if (data.examTarget === 'UPSC Civil Services') {
             loadedProfiles.UPSC.unshift(realUser);
           } else if (data.examTarget === 'NEET UG') {
@@ -112,23 +115,31 @@ const MatchSimulator = ({ onConnect }) => {
     }
   };
 
-  const handleThunderbolt = async () => {
+  const triggerThunderboltModal = () => {
+    setShowThunderboltModal(true);
+  };
+
+  const submitThunderbolt = async (e) => {
+    e.preventDefault();
     const currentObj = profiles[selectedStream][currentCardIndex];
     const myId = auth.currentUser.uid;
     const theirId = currentObj.id;
 
-    const message = window.prompt(`Send exactly one icebreaker message to ${currentObj.name}. (You cannot message them again until they reply!)`);
-    if (!message || message.trim() === "") return; 
+    if (!thunderboltMessage || thunderboltMessage.trim() === "") return; 
 
     try {
       await setDoc(doc(db, 'thunderbolts', `${myId}_${theirId}`), {
         from: myId,
         to: theirId,
-        message: message,
+        message: thunderboltMessage,
         status: 'pending_reply',
         timestamp: serverTimestamp()
       });
       alert(`⚡ Thunderbolt sent to ${currentObj.name}! It is now locked in your Inbox waiting for their reply.`);
+      
+      // Close modal and move to next card
+      setShowThunderboltModal(false);
+      setThunderboltMessage("");
       nextCard();
     } catch (error) {
       console.error("Error sending thunderbolt:", error);
@@ -186,7 +197,47 @@ const MatchSimulator = ({ onConnect }) => {
   };
 
   return (
-    <section id="prototype" className="py-20 bg-slate-900/40 border-t border-b border-slate-900">
+    <section id="prototype" className="py-20 bg-slate-900/40 border-t border-b border-slate-900 relative">
+        
+        {/* THUNDERBOLT MODAL OVERLAY */}
+        {showThunderboltModal && profiles[selectedStream] && profiles[selectedStream][currentCardIndex] && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-indigo-500/30 p-6 rounded-2xl w-full max-w-sm shadow-2xl animate-fade-in">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                  <i className="fa-solid fa-bolt"></i>
+                </div>
+                <h3 className="text-white font-bold text-lg">Message {profiles[selectedStream][currentCardIndex].name.split(' ')[0]}</h3>
+              </div>
+              <form onSubmit={submitThunderbolt}>
+                <textarea 
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-white focus:outline-none focus:border-indigo-500 min-h-[120px] mb-4 text-sm resize-none"
+                  placeholder="Write a standout icebreaker message... (You cannot message them again until they reply!)"
+                  value={thunderboltMessage}
+                  onChange={(e) => setThunderboltMessage(e.target.value)}
+                  autoFocus
+                />
+                <div className="flex gap-3">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowThunderboltModal(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={!thunderboltMessage.trim()}
+                    className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Send ⚡
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
                 
@@ -330,7 +381,7 @@ const MatchSimulator = ({ onConnect }) => {
                                 <div className="flex items-center justify-center gap-6 pt-4 border-t border-slate-900">
                                     <button onClick={handlePass} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center transition shadow-lg cursor-pointer"><i className="fa-solid fa-xmark text-lg"></i></button>
                                     
-                                    <button onClick={handleThunderbolt} className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center transition shadow-xl hover:scale-105 active:scale-95 cursor-pointer"><i className="fa-solid fa-bolt text-xl"></i></button>
+                                    <button onClick={triggerThunderboltModal} className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center transition shadow-xl hover:scale-105 active:scale-95 cursor-pointer"><i className="fa-solid fa-bolt text-xl"></i></button>
                                     
                                     <button onClick={handleCheck} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 flex items-center justify-center transition shadow-lg cursor-pointer"><i className="fa-solid fa-check text-lg"></i></button>
                                 </div>

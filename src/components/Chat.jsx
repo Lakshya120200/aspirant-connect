@@ -11,34 +11,32 @@ const Chat = ({ peer, onClearPeer }) => {
   
   const fileInputRef = useRef(null);
   const scrollRef = useRef();
-  const emojiPickerRef = useRef(null); // 1. ADDED REF
+  const emojiPickerRef = useRef(null);
 
-  // 2. ADDED EFFECT TO CLOSE EMOJI PICKER ON OUTSIDE CLICK
+  // Close emoji picker when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
         setShowEmojiPicker(false);
       }
     };
-
-    if (showEmojiPicker) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
+    if (showEmojiPicker) document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showEmojiPicker]);
 
   const getRoomId = () => {
     if (!peer || !auth.currentUser) return null;
-    const myId = auth.currentUser.uid;
-    const peerId = peer.id; 
-    return myId < peerId ? `${myId}_${peerId}` : `${peerId}_${myId}`;
+    return auth.currentUser.uid < peer.id ? `${auth.currentUser.uid}_${peer.id}` : `${peer.id}_${auth.currentUser.uid}`;
   };
 
+  // FETCH MESSAGES (Handles both Global and Private)
   useEffect(() => {
     let q;
     if (!peer) {
+      // No peer selected = Global Study Room
       q = query(collection(db, 'messages'), orderBy('createdAt', 'asc'));
     } else {
+      // Peer selected = Private Match Room
       const roomId = getRoomId();
       if (!roomId) return;
       q = query(collection(db, 'rooms', roomId, 'messages'), orderBy('createdAt', 'asc'));
@@ -51,15 +49,32 @@ const Chat = ({ peer, onClearPeer }) => {
     return () => unsubscribe();
   }, [peer]);
 
+  // Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleEmojiClick = (emojiData) => {
-    setNewMessage((prev) => prev + emojiData.emoji);
-    setShowEmojiPicker(false);
+  // SEND MESSAGE (Handles both Global and Private)
+  const sendMessage = async (e) => {
+    e.preventDefault();
+    if (newMessage.trim() === "") return;
+
+    const payload = {
+        text: newMessage,
+        createdAt: serverTimestamp(),
+        uid: auth.currentUser.uid,
+        senderName: auth.currentUser.displayName || "Aspirant"
+    };
+
+    if (!peer) {
+      await addDoc(collection(db, 'messages'), payload); // Global
+    } else {
+      await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), payload); // Private
+    }
+    setNewMessage("");
   };
 
+  // UPLOAD IMAGE (Handles both Global and Private)
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -77,32 +92,13 @@ const Chat = ({ peer, onClearPeer }) => {
       };
 
       if (!peer) {
-        await addDoc(collection(db, 'messages'), payload);
+        await addDoc(collection(db, 'messages'), payload); // Global
       } else {
-        await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), payload);
+        await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), payload); // Private
       }
     } catch (error) {
       console.error("Error uploading image:", error);
     }
-  };
-
-  const sendMessage = async (e) => {
-    e.preventDefault();
-    if (newMessage.trim() === "") return;
-
-    const payload = {
-        text: newMessage,
-        createdAt: serverTimestamp(),
-        uid: auth.currentUser.uid,
-        senderName: auth.currentUser.displayName || "Aspirant"
-    };
-
-    if (!peer) {
-      await addDoc(collection(db, 'messages'), payload);
-    } else {
-      await addDoc(collection(db, 'rooms', getRoomId(), 'messages'), payload);
-    }
-    setNewMessage("");
   };
 
   const formatTime = (timestamp) => {
@@ -113,16 +109,28 @@ const Chat = ({ peer, onClearPeer }) => {
   return (
     <div className="flex flex-col h-[500px] bg-[#0B0F19] border border-slate-800 rounded-2xl overflow-hidden max-w-4xl mx-auto shadow-2xl relative">
       
-      {/* 3. UPDATED DIV WITH REF */}
       {showEmojiPicker && (
         <div ref={emojiPickerRef} className="absolute bottom-20 left-4 z-50">
-          <EmojiPicker onEmojiClick={handleEmojiClick} theme="dark" />
+          <EmojiPicker onEmojiClick={(e) => { setNewMessage(prev => prev + e.emoji); setShowEmojiPicker(false); }} theme="dark" />
         </div>
       )}
 
       <div className="px-6 py-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
-        <h3 className="font-bold text-white text-lg">{peer ? `Room: ${peer.name}` : 'Global Study Room'}</h3>
-        {peer && <button onClick={onClearPeer} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition">Close</button>}
+        {/* Dynamic Header: Global vs Private */}
+        <h3 className="font-bold text-white text-lg">
+          {peer ? `Room: ${peer.name}` : 'Global Study Room'}
+        </h3>
+        
+        {/* ONLY show presence and close button IF in a private match */}
+        {peer && (
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${peer.status === 'online' ? 'bg-green-500' : 'bg-gray-500'}`} />
+              <span className="text-[12px] text-slate-400">{peer.status === 'online' ? 'Online' : 'Offline'}</span>
+            </div>
+            <button onClick={onClearPeer} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition">Close</button>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-4">

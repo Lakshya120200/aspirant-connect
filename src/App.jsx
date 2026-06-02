@@ -3,6 +3,7 @@ import { auth, db } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
+// Components
 import Navbar from './components/Navbar';
 import HeroSection from './components/HeroSection';
 import MatchSimulator from './components/MatchSimulator';
@@ -11,31 +12,34 @@ import Chat from './components/Chat';
 import Onboarding from './components/Onboarding';
 import Inbox from './components/Inbox';
 import Matches from './components/Matches';
-import Profile from './components/Profile'; // <-- 1. IMPORTED NEW COMPONENT
+import Profile from './components/Profile';
+import PresenceManager from './components/PresenceManager';
+import PendingRequests from './components/PendingRequests'; // 1. ADDED IMPORT
 
 function App() {
+  // State management
   const [user, setUser] = useState(null);
   const [hasProfile, setHasProfile] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // Tracks who you are chatting with.
+  // Tracks the person being chatted with
   const [activePeer, setActivePeer] = useState(null); 
-
-  // <-- 2. NEW STATE: Tracks if we should show the Profile page
+  
+  // View Switcher state
   const [showProfile, setShowProfile] = useState(false);
 
+  // Auth & Profile Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       
       if (currentUser) {
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        
-        if (userDocSnap.exists()) {
-          setHasProfile(true);
-        } else {
-          setHasProfile(false);
+        try {
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          setHasProfile(userDocSnap.exists());
+        } catch (error) {
+          console.error("Error checking profile:", error);
         }
       }
       setLoading(false);
@@ -43,23 +47,26 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // Loading state
   if (loading) return <div className="bg-slate-950 min-h-screen"></div>;
 
-  if (!user) {
-    return <Login />;
-  }
+  // 1. Auth Gate
+  if (!user) return <Login />;
 
-  if (!hasProfile) {
-    return <Onboarding onProfileCreated={() => setHasProfile(true)} user={user} />;
-  }
+  // 2. Onboarding Gate
+  if (!hasProfile) return <Onboarding onProfileCreated={() => setHasProfile(true)} user={user} />;
 
+  // 3. Main Application Dashboard
   return (
     <div className="bg-slate-950 min-h-screen text-white selection:bg-indigo-500 selection:text-white pb-20">
       
-      {/* 3. We pass the trigger down to the Navbar! */}
+      {/* Real-time Presence Tracking */}
+      <PresenceManager />
+      
+      {/* Navigation - Passing the trigger to open profile */}
       <Navbar onOpenProfile={() => setShowProfile(true)} />
       
-      {/* 4. IF showProfile is true, show the settings page. IF false, show the dashboard! */}
+      {/* View Switcher: Profile vs. Dashboard */}
       {showProfile ? (
         <div className="pt-12 px-4 sm:px-6 lg:px-8">
             <Profile onBack={() => setShowProfile(false)} />
@@ -70,17 +77,15 @@ function App() {
           
           <MatchSimulator onConnect={(peer) => setActivePeer(peer)} />
           
-          <div className="mt-12 px-4 sm:px-6 lg:px-8">
+          <div className="mt-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+            {/* 2. ADDED PENDING REQUESTS COMPONENT */}
+            <PendingRequests />
             
-            {/* The Pending Requests & Likes */}
+            {/* Inbox, Matches, and Chat components fully retained */}
             <Inbox onAccept={(peer) => setActivePeer(peer)} />
-
-            {/* The Permanent Instagram-style Match List */}
             <Matches onSelectMatch={(peer) => setActivePeer(peer)} />
-
-            {/* The Private Chat Room */}
-            <Chat peer={activePeer} onClearPeer={() => setActivePeer(null)} />
             
+            <Chat peer={activePeer} onClearPeer={() => setActivePeer(null)} />
           </div>
         </>
       )}
