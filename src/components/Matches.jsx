@@ -24,7 +24,7 @@ const Matches = ({ onSelectMatch, onViewProfile }) => {
       setMatches(sorted);
     };
 
-    // 1. Connection Listeners (Safely split up to fix the InvalidQuery crash)
+    // 1. Connection Listeners
     const qSwipes = query(collection(db, 'swipes'), or(where('from', '==', myId), where('to', '==', myId)));
     const qThunderFrom = query(collection(db, 'thunderbolts'), where('from', '==', myId), where('status', '==', 'active'));
     const qThunderTo = query(collection(db, 'thunderbolts'), where('to', '==', myId), where('status', '==', 'active'));
@@ -32,6 +32,13 @@ const Matches = ({ onSelectMatch, onViewProfile }) => {
     const handleConnectionSnap = async (snap) => {
       for (const d of snap.docs) {
         const data = d.data();
+        
+        // --- CORE BUG FIX ---
+        // Ignore one-way "pending" swipes. Only allow mutual "accepted" swipes or "active" Thunderbolts.
+        if (data.status !== 'accepted' && data.status !== 'active') {
+          continue; 
+        }
+
         const otherId = data.from === myId ? data.to : data.from;
         if (!matchMap.has(otherId)) {
           const snapUser = await getDoc(doc(db, 'users', otherId));
@@ -60,7 +67,6 @@ const Matches = ({ onSelectMatch, onViewProfile }) => {
               if (msg.to === myId && msg.read === false) {
                 counts[peerId] = (counts[peerId] || 0) + 1;
               }
-              // This triggers your sorting automatically
               updateMatches(peerId, {}, time);
             }
           }

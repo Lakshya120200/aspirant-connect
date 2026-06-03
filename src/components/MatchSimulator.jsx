@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, getDocs, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+// Added updateDoc to the imports to handle mutual matches
+import { collection, getDocs, doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 const MatchSimulator = ({ onConnect }) => {
   const [profiles, setProfiles] = useState({ UPSC: [], NEET: [], FMGE: [], SSC: [] });
@@ -89,26 +90,44 @@ const MatchSimulator = ({ onConnect }) => {
   const handleVibeSelect = (vibe) => { setSelectedVibe(vibe); setCurrentCardIndex(0); setStep(3); };
   const nextCard = () => { setCurrentCardIndex(prev => prev + 1); };
 
+  // --- BUG FIX APPLIED HERE ---
   const handleCheck = async () => {
     const currentObj = profiles[selectedStream][currentCardIndex];
     const myId = auth.currentUser.uid;
     const theirId = currentObj.id;
 
     try {
-      await setDoc(doc(db, 'swipes', `${myId}_${theirId}`), {
-        from: myId,
-        to: theirId,
-        timestamp: serverTimestamp()
-      });
+      // 1. Check if they have already swiped right on us first
+      const mutualSwipeRef = doc(db, 'swipes', `${theirId}_${myId}`);
+      const mutualSwipe = await getDoc(mutualSwipeRef);
 
-      const mutualSwipe = await getDoc(doc(db, 'swipes', `${theirId}_${myId}`));
       if (mutualSwipe.exists()) {
-        alert(`🎉 MUTUAL MATCH! You and ${currentObj.name} liked each other.`);
+        // Mutual Match! They already liked us, so we lock in the connection by setting both to 'accepted'
+        await setDoc(doc(db, 'swipes', `${myId}_${theirId}`), {
+          from: myId,
+          to: theirId,
+          status: 'accepted',
+          timestamp: serverTimestamp()
+        });
+        await updateDoc(mutualSwipeRef, { status: 'accepted' });
+        
+        alert(`🎉 MUTUAL MATCH! You and ${currentObj.name} are now connected.`);
       } else {
-        alert(`✅ You liked ${currentObj.name}!`);
+        // One-Way Swipe! We are liking them first. It MUST stay 'pending' until they accept.
+        await setDoc(doc(db, 'swipes', `${myId}_${theirId}`), {
+          from: myId,
+          to: theirId,
+          status: 'pending', 
+          timestamp: serverTimestamp()
+        });
+        
+        alert(`✅ Request sent to ${currentObj.name}! They will see it in their Inbox.`);
       }
       nextCard();
-    } catch (error) { console.error("Error saving swipe:", error); nextCard(); }
+    } catch (error) { 
+      console.error("Error saving swipe:", error); 
+      nextCard(); 
+    }
   };
 
   const triggerThunderboltModal = () => setShowThunderboltModal(true);
