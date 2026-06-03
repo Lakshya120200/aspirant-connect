@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-// Added updateDoc to the imports to handle mutual matches
-import { collection, getDocs, doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, getDoc, updateDoc, serverTimestamp, query, where } from 'firebase/firestore';
 
 const MatchSimulator = ({ onConnect }) => {
   const [profiles, setProfiles] = useState({ UPSC: [], NEET: [], FMGE: [], SSC: [] });
@@ -12,7 +11,6 @@ const MatchSimulator = ({ onConnect }) => {
   const [selectedVibe, setSelectedVibe] = useState(null);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
 
-  // Modal State for Thunderbolt
   const [showThunderboltModal, setShowThunderboltModal] = useState(false);
   const [thunderboltMessage, setThunderboltMessage] = useState("");
 
@@ -22,15 +20,23 @@ const MatchSimulator = ({ onConnect }) => {
         const myId = auth.currentUser?.uid;
         if (!myId) return;
 
-        // 1. SMART FEED: Fetch all my history to build a blacklist
-        const interactedIds = new Set();
-        const swipeSnap = await getDocs(collection(db, 'swipes'));
-        swipeSnap.forEach(d => { if (d.data().from === myId) interactedIds.add(d.data().to); });
+        // SMART FEED: Blacklist ONLY people with active or pending connections
+        const blacklistIds = new Set();
         
-        const thunderSnap = await getDocs(collection(db, 'thunderbolts'));
-        thunderSnap.forEach(d => { if (d.data().from === myId) interactedIds.add(d.data().to); });
+        const swipeSnap = await getDocs(query(collection(db, 'swipes'), where('from', '==', myId)));
+        swipeSnap.forEach(d => { 
+            if (d.data().status === 'pending' || d.data().status === 'accepted') {
+                blacklistIds.add(d.data().to); 
+            }
+        });
+        
+        const thunderSnap = await getDocs(query(collection(db, 'thunderbolts'), where('from', '==', myId)));
+        thunderSnap.forEach(d => { 
+            if (d.data().status === 'pending_reply' || d.data().status === 'active') {
+                blacklistIds.add(d.data().to); 
+            }
+        });
 
-        // 2. Fetch all users
         const querySnapshot = await getDocs(collection(db, 'users'));
         let loadedProfiles = {
           UPSC: [
@@ -49,8 +55,7 @@ const MatchSimulator = ({ onConnect }) => {
         };
 
         querySnapshot.forEach((doc) => {
-          // 3. SMART FEED: Filter out users I've already interacted with
-          if (doc.id === myId || interactedIds.has(doc.id)) return; 
+          if (doc.id === myId || blacklistIds.has(doc.id)) return; 
 
           const data = doc.data();
           const realUser = {
@@ -90,44 +95,29 @@ const MatchSimulator = ({ onConnect }) => {
   const handleVibeSelect = (vibe) => { setSelectedVibe(vibe); setCurrentCardIndex(0); setStep(3); };
   const nextCard = () => { setCurrentCardIndex(prev => prev + 1); };
 
-  // --- BUG FIX APPLIED HERE ---
   const handleCheck = async () => {
     const currentObj = profiles[selectedStream][currentCardIndex];
     const myId = auth.currentUser.uid;
     const theirId = currentObj.id;
 
     try {
-      // 1. Check if they have already swiped right on us first
       const mutualSwipeRef = doc(db, 'swipes', `${theirId}_${myId}`);
       const mutualSwipe = await getDoc(mutualSwipeRef);
 
-      if (mutualSwipe.exists()) {
-        // Mutual Match! They already liked us, so we lock in the connection by setting both to 'accepted'
+      if (mutualSwipe.exists() && mutualSwipe.data().status === 'pending') {
         await setDoc(doc(db, 'swipes', `${myId}_${theirId}`), {
-          from: myId,
-          to: theirId,
-          status: 'accepted',
-          timestamp: serverTimestamp()
+          from: myId, to: theirId, status: 'accepted', timestamp: serverTimestamp()
         });
         await updateDoc(mutualSwipeRef, { status: 'accepted' });
-        
-        alert(`🎉 MUTUAL MATCH! You and ${currentObj.name} are now connected.`);
+        alert(`🎉 MUTUAL MATCH! You and ${currentObj.name} are connected.`);
       } else {
-        // One-Way Swipe! We are liking them first. It MUST stay 'pending' until they accept.
         await setDoc(doc(db, 'swipes', `${myId}_${theirId}`), {
-          from: myId,
-          to: theirId,
-          status: 'pending', 
-          timestamp: serverTimestamp()
+          from: myId, to: theirId, status: 'pending', timestamp: serverTimestamp()
         });
-        
-        alert(`✅ Request sent to ${currentObj.name}! They will see it in their Inbox.`);
+        alert(`✅ Request sent to ${currentObj.name}!`);
       }
       nextCard();
-    } catch (error) { 
-      console.error("Error saving swipe:", error); 
-      nextCard(); 
-    }
+    } catch (error) { console.error("Error saving swipe:", error); nextCard(); }
   };
 
   const triggerThunderboltModal = () => setShowThunderboltModal(true);
@@ -138,21 +128,15 @@ const MatchSimulator = ({ onConnect }) => {
     const myId = auth.currentUser.uid;
     const theirId = currentObj.id;
 
-    if (!thunderboltMessage || thunderboltMessage.trim() === "") return; 
-
     try {
       await setDoc(doc(db, 'thunderbolts', `${myId}_${theirId}`), {
-        from: myId,
-        to: theirId,
-        message: thunderboltMessage,
-        status: 'pending_reply',
-        timestamp: serverTimestamp()
+        from: myId, to: theirId, message: thunderboltMessage, status: 'pending_reply', timestamp: serverTimestamp()
       });
-      alert(`⚡ Thunderbolt sent to ${currentObj.name}!`);
+      alert(`⚡ Thunderbolt sent!`);
       setShowThunderboltModal(false);
       setThunderboltMessage("");
       nextCard();
-    } catch (error) { console.error("Error sending thunderbolt:", error); }
+    } catch (error) { console.error("Error:", error); }
   };
 
   const handlePass = () => nextCard();

@@ -7,7 +7,6 @@ const Inbox = ({ onAccept }) => {
   const [likes, setLikes] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // TOAST STATE
   const [toast, setToast] = useState(null);
   const triggerToast = (msg) => {
     setToast(msg);
@@ -18,7 +17,7 @@ const Inbox = ({ onAccept }) => {
     if (!auth.currentUser) return;
     const myId = auth.currentUser.uid;
 
-    // 1. Listen for incoming Thunderbolts
+    // 1. Listen for incoming Thunderbolts (Pending)
     const qThunder = query(
       collection(db, 'thunderbolts'), 
       where('to', '==', myId),
@@ -45,20 +44,24 @@ const Inbox = ({ onAccept }) => {
       setRequests(pendingRequests);
     });
 
-    // 2. Listen for incoming Swipes
-    const qLikes = query(collection(db, 'swipes'), where('to', '==', myId));
+    // 2. Listen for incoming Swipes (Pending)
+    const qLikes = query(
+        collection(db, 'swipes'), 
+        where('to', '==', myId),
+        where('status', '==', 'pending')
+    );
+
     const unsubLikes = onSnapshot(qLikes, async (snapshot) => {
       const pendingLikes = [];
       for (const likeDoc of snapshot.docs) {
         const likeData = likeDoc.data();
-        const mutualCheck = await getDoc(doc(db, 'swipes', `${myId}_${likeData.from}`));
-        
-        if (!mutualCheck.exists()) {
+        // Double check they haven't matched already
+        if (likeData.status === 'pending') {
           const senderProfileSnap = await getDoc(doc(db, 'users', likeData.from));
           if (senderProfileSnap.exists()) {
             const senderData = senderProfileSnap.data();
             pendingLikes.push({
-              id: likeDoc.id,
+              id: likeDoc.id, // This is the ID of the incoming swipe doc
               senderId: likeData.from,
               senderName: senderData.name,
               senderTarget: senderData.examTarget,
@@ -78,9 +81,10 @@ const Inbox = ({ onAccept }) => {
     };
   }, []);
 
-  // Actions
+  // --- BUG FIXES APPLIED HERE ---
   const handleAcceptThunderbolt = async (request) => {
     try {
+      // Set to 'active' so Matches.jsx picks it up
       await updateDoc(doc(db, 'thunderbolts', request.id), { status: 'active' });
       triggerToast("Connected successfully!");
       onAccept({ id: request.senderId, name: request.senderName, target: request.senderTarget });
@@ -96,11 +100,17 @@ const Inbox = ({ onAccept }) => {
 
   const handleMatchLike = async (like) => {
     try {
+      // 1. Update the incoming swipe to 'accepted'
+      await updateDoc(doc(db, 'swipes', like.id), { status: 'accepted' });
+      
+      // 2. Create the mutual record with 'accepted' status
       await setDoc(doc(db, 'swipes', `${auth.currentUser.uid}_${like.senderId}`), {
         from: auth.currentUser.uid,
         to: like.senderId,
+        status: 'accepted',
         timestamp: serverTimestamp()
       });
+      
       triggerToast("Matched with " + like.senderName);
       onAccept({ id: like.senderId, name: like.senderName, target: like.senderTarget });
     } catch (error) { console.error("Error matching:", error); }
@@ -108,7 +118,8 @@ const Inbox = ({ onAccept }) => {
 
   const handlePassLike = async (likeId) => {
     try {
-      await deleteDoc(doc(db, 'swipes', likeId));
+      // Instead of deleting, mark as 'declined' so it doesn't reappear
+      await updateDoc(doc(db, 'swipes', likeId), { status: 'declined' });
       triggerToast("Request rejected.");
     } catch (error) { console.error("Error passing:", error); }
   };
@@ -118,7 +129,6 @@ const Inbox = ({ onAccept }) => {
 
   return (
     <div className="max-w-4xl mx-auto w-full mb-8 space-y-8 animate-fade-in relative">
-      {/* Toast Overlay */}
       {toast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-indigo-600 text-white px-6 py-2 rounded-full shadow-2xl animate-fade-in text-sm font-bold border border-indigo-400">
           {toast}
