@@ -151,11 +151,21 @@ function App() {
             
             <Chat peer={activePeer} onClearPeer={() => setActivePeer(null)} />
             
-            <div className="text-center py-6">
-                <button onClick={() => setShowFeedback(true)} className="text-slate-500 hover:text-indigo-400 text-sm">
-                    Have feedback or want to see a new feature? Let us know!
-                </button>
+            {/* NEW FEEDBACK PILL BUTTON ADDED HERE */}
+            <div className="text-center py-8">
+              <button 
+                onClick={() => setShowFeedback(true)} 
+                className="inline-flex items-center gap-3 px-6 py-3 bg-slate-900 border border-slate-700 hover:border-indigo-500 rounded-full text-slate-400 hover:text-white text-sm transition-all shadow-lg hover:shadow-indigo-500/20 group"
+              >
+                {/* Lightbulb Icon */}
+                <svg className="w-5 h-5 text-indigo-400 group-hover:animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                
+                <span>Have feedback or a feature idea? <span className="text-indigo-400 font-semibold group-hover:text-indigo-300 ml-1">Let us know!</span></span>
+              </button>
             </div>
+
           </div>
         </>
       )}
