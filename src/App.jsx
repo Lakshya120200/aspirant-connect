@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-// Added enableNetwork to the imports
-import { doc, getDoc, collection, query, where, getDocs, deleteDoc, writeBatch, enableNetwork } from 'firebase/firestore'; 
+// Removed enableNetwork from imports to prevent Firestore crash
+import { doc, getDoc, collection, query, where, getDocs, deleteDoc, writeBatch } from 'firebase/firestore'; 
 
 // Components
 import Navbar from './components/Navbar';
@@ -80,19 +80,8 @@ function App() {
       setLoading(false);
     });
 
-    // 2. NEW: Wake-up Listener for Firebase (handles tab sleeping)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        // Force Firebase to reconnect instantly when the user comes back to the tab
-        enableNetwork(db).catch((err) => console.error("Firebase reconnect error:", err));
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
     return () => {
       unsubscribe();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
